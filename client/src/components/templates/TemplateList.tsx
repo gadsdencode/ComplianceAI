@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Template } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
-import { FileText, User, Calendar, Eye, Copy } from 'lucide-react';
+import { FileText, User, Calendar, Eye, Copy, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import ReactMarkdown from 'react-markdown';
 
 interface TemplateListProps {
   templates: Template[];
@@ -17,6 +20,7 @@ interface TemplateListProps {
 export default function TemplateList({ templates, isLoading, error }: TemplateListProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
 
   const handleUseTemplate = (template: Template) => {
     // In a real app, this would navigate to document creation with template pre-selected
@@ -24,6 +28,10 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
       title: 'Template selected',
       description: `Selected template: ${template.name}`
     });
+  };
+
+  const handlePreviewTemplate = (template: Template) => {
+    setPreviewTemplate(template);
   };
 
   if (isLoading) {
@@ -73,65 +81,88 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
   }
 
   return (
-    <div className="space-y-4">
-      {templates.map((template) => (
-        <Card 
-          key={template.id} 
-          className="overflow-hidden hover:shadow-md transition-shadow"
-        >
-          <CardContent className="p-0">
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="h-10 w-10 rounded-md bg-primary-50 text-primary-600 flex items-center justify-center mr-4">
-                    <FileText size={20} />
-                  </div>
-                  <div>
-                    <div className="flex items-center">
-                      <h3 className="font-medium">{template.name}</h3>
-                      {template.isDefault && (
-                        <Badge className="ml-2 bg-slate-100 text-slate-800 hover:bg-slate-100">Default</Badge>
-                      )}
-                      {template.category && (
-                        <Badge variant="outline" className="ml-2">{template.category}</Badge>
-                      )}
+    <>
+      <div className="space-y-4">
+        {templates.map((template) => (
+          <Card 
+            key={template.id} 
+            className="overflow-hidden hover:shadow-md transition-shadow"
+          >
+            <CardContent className="p-0">
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="h-10 w-10 rounded-md bg-primary-50 text-primary-600 flex items-center justify-center mr-4">
+                      <FileText size={20} />
                     </div>
-                    <div className="flex items-center text-sm text-slate-500 mt-1">
-                      <span className="flex items-center">
-                        <User className="h-3.5 w-3.5 mr-1" />
-                        Created by User ID: {template.createdById}
-                      </span>
-                      
-                      <span className="flex items-center ml-4">
-                        <Calendar className="h-3.5 w-3.5 mr-1" />
-                        {formatDistanceToNow(new Date(template.createdAt), { addSuffix: true })}
-                      </span>
+                    <div>
+                      <div className="flex items-center">
+                        <h3 className="font-medium">{template.name}</h3>
+                        {template.isDefault && (
+                          <Badge className="ml-2 bg-slate-100 text-slate-800 hover:bg-slate-100">Default</Badge>
+                        )}
+                        {template.category && (
+                          <Badge variant="outline" className="ml-2">{template.category}</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center text-sm text-slate-500 mt-1">
+                        <span className="flex items-center">
+                          <User className="h-3.5 w-3.5 mr-1" />
+                          Created by User ID: {template.createdById}
+                        </span>
+                        
+                        <span className="flex items-center ml-4">
+                          <Calendar className="h-3.5 w-3.5 mr-1" />
+                          {formatDistanceToNow(new Date(template.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {}}
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    Preview
-                  </Button>
-                  <Button 
-                    size="sm"
-                    onClick={() => handleUseTemplate(template)}
-                  >
-                    <Copy className="h-4 w-4 mr-1" />
-                    Use Template
-                  </Button>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handlePreviewTemplate(template)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Preview
+                    </Button>
+                    <Button 
+                      size="sm"
+                      onClick={() => handleUseTemplate(template)}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Use Template
+                    </Button>
+                  </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Template Preview Modal */}
+      <Dialog open={previewTemplate !== null} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Template Preview: {previewTemplate?.name}</span>
+              <DialogClose asChild>
+                <Button variant="ghost" size="icon">
+                  <X className="h-4 w-4" />
+                </Button>
+              </DialogClose>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-2 max-h-[70vh] overflow-auto border rounded-md bg-white">
+            <div className="prose max-w-none prose-slate prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-base prose-a:text-primary-600">
+              {previewTemplate && <ReactMarkdown>{previewTemplate.content}</ReactMarkdown>}
             </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
