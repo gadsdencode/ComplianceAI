@@ -145,8 +145,8 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
 
       {/* Template Preview Modal */}
       <Dialog open={previewTemplate !== null} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] h-[90vh] max-h-[90vh] p-0">
+          <DialogHeader className="p-6 pb-2">
             <DialogTitle className="flex items-center justify-between">
               <span>Template Preview: {previewTemplate?.name}</span>
               <DialogClose asChild>
@@ -155,10 +155,15 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
                 </Button>
               </DialogClose>
             </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Previewing document template in markdown format
+            </p>
           </DialogHeader>
-          <div className="p-2 max-h-[70vh] overflow-auto border rounded-md bg-white">
-            <div className="prose max-w-none prose-slate prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-base prose-a:text-primary-600">
-              {previewTemplate && <ReactMarkdown>{previewTemplate.content}</ReactMarkdown>}
+          <div className="px-6 pb-6 overflow-y-auto flex-grow" style={{ maxHeight: "calc(90vh - 100px)" }}>
+            <div className="p-4 border rounded-md bg-white">
+              <div className="prose max-w-none prose-slate prose-headings:font-semibold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-p:text-base prose-a:text-primary-600">
+                {previewTemplate && <ReactMarkdown>{previewTemplate.content}</ReactMarkdown>}
+              </div>
             </div>
           </div>
         </DialogContent>
