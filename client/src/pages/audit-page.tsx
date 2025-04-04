@@ -17,7 +17,7 @@ import {
   Filter
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { useNavigate } from 'wouter';
+import { useLocation } from 'wouter';
 import { 
   Select, 
   SelectContent, 
@@ -29,7 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 
 export default function AuditPage() {
-  const [navigate] = useNavigate();
+  const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
   const [actionFilter, setActionFilter] = useState('all');

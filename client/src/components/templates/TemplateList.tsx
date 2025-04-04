@@ -1,4 +1,4 @@
-import { useNavigate } from 'wouter';
+import { useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ interface TemplateListProps {
 }
 
 export default function TemplateList({ templates, isLoading, error }: TemplateListProps) {
-  const [navigate] = useNavigate();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const handleUseTemplate = (template: Template) => {

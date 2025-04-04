@@ -1,4 +1,4 @@
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +77,7 @@ export default function DocumentsSection({
   recentDocuments, 
   isLoading = false 
 }: DocumentsSectionProps) {
-  const [navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   if (isLoading) {
     return (

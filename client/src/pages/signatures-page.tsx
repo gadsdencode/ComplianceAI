@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Document, Signature, DocumentVersion } from '@/types';
 import { PenTool, Calendar, Clock, Eye, FileText, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
-import { useNavigate } from 'wouter';
+import { useLocation } from 'wouter';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function SignaturesPage() {
   const [activeTab, setActiveTab] = useState('signed');
-  const [navigate] = useNavigate();
+  const [, navigate] = useLocation();
   
   // Fetch documents that need signatures (pending)
   const { 

@@ -1,4 +1,4 @@
-import { useNavigate } from 'wouter';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,7 +51,7 @@ const getStatusBadge = (status: string) => {
 };
 
 export default function DocumentList({ documents, isLoading, error }: DocumentListProps) {
-  const [navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   if (isLoading) {
     return (

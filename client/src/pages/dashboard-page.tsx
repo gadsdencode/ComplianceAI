@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'wouter';
+import { useLocation } from 'wouter';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import DocumentsSection from '@/components/dashboard/DocumentsSection';
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
   
   // Fetch dashboard stats
   const { 
