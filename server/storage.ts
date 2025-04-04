@@ -5,9 +5,12 @@ import type {
   ComplianceDeadline, InsertComplianceDeadline, Template, InsertTemplate 
 } from "@shared/schema";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import { eq, gt, desc, asc, and, sql } from "drizzle-orm";
+import { db } from "./db";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   // Users
@@ -61,127 +64,119 @@ export interface IStorage {
   sessionStore: session.SessionStore;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private documents: Map<number, Document>;
-  private documentVersions: Map<number, DocumentVersion[]>;
-  private signatures: Map<number, Signature>;
-  private auditRecords: Map<number, AuditTrail>;
-  private complianceDeadlines: Map<number, ComplianceDeadline>;
-  private templates: Map<number, Template>;
-  
-  // Counters for IDs
-  private userIdCounter: number;
-  private documentIdCounter: number;
-  private versionIdCounter: number;
-  private signatureIdCounter: number;
-  private auditIdCounter: number;
-  private deadlineIdCounter: number;
-  private templateIdCounter: number;
-  
-  // Session store
+export class DatabaseStorage implements IStorage {
   sessionStore: session.SessionStore;
   
   constructor() {
-    this.users = new Map();
-    this.documents = new Map();
-    this.documentVersions = new Map();
-    this.signatures = new Map();
-    this.auditRecords = new Map();
-    this.complianceDeadlines = new Map();
-    this.templates = new Map();
-    
-    this.userIdCounter = 1;
-    this.documentIdCounter = 1;
-    this.versionIdCounter = 1;
-    this.signatureIdCounter = 1;
-    this.auditIdCounter = 1;
-    this.deadlineIdCounter = 1;
-    this.templateIdCounter = 1;
-    
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000 // Prune expired entries every 24h
+    this.sessionStore = new PostgresSessionStore({ 
+      pool, 
+      createTableIfMissing: true 
     });
-
+    
+    // Initialize default templates
+    this.initDefaultTemplates();
+  }
+  
+  private async initDefaultTemplates() {
+    // Check if there are any templates
+    const existingTemplates = await db.select({ count: sql`count(*)` }).from(templates);
+    if (parseInt(existingTemplates[0].count as string) > 0) {
+      return; // Already have templates
+    }
+    
+    // Create admin user if it doesn't exist
+    let adminId = 1;
+    const adminUser = await this.getUserByUsername("admin@compliance.ai");
+    if (!adminUser) {
+      const admin = await this.createUser({
+        username: "admin@compliance.ai",
+        password: "$2b$10$zreNJHPZ4WEGkSVFX/l98eThME7E6gZl/lQPLiCnQnCY3s.x3EvFi", // hashed "admin123"
+        name: "System Admin",
+        email: "admin@compliance.ai",
+        role: "admin"
+      });
+      adminId = admin.id;
+    }
+    
     // Add default templates
-    this.createTemplate({
+    await this.createTemplate({
       name: "GDPR Compliance",
       content: "# GDPR Compliance Statement\n\nThis document outlines how [Company Name] complies with GDPR regulations...",
       category: "Privacy",
-      createdById: 1,
+      createdById: adminId,
       isDefault: true
     });
 
-    this.createTemplate({
+    await this.createTemplate({
       name: "ISO 27001",
       content: "# ISO 27001 Information Security Policy\n\n[Company Name] is committed to information security...",
       category: "Security",
-      createdById: 1,
+      createdById: adminId,
       isDefault: true
     });
 
-    this.createTemplate({
+    await this.createTemplate({
       name: "PCI DSS",
       content: "# PCI DSS Compliance Statement\n\n[Company Name] adheres to the Payment Card Industry Data Security Standard...",
       category: "Financial",
-      createdById: 1,
+      createdById: adminId,
       isDefault: true
     });
 
-    this.createTemplate({
+    await this.createTemplate({
       name: "SOC 2",
       content: "# SOC 2 Compliance Statement\n\n[Company Name] follows the Trust Services Criteria...",
       category: "Security",
-      createdById: 1,
+      createdById: adminId,
       isDefault: true
     });
   }
   
   // User management
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
   
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.username === username);
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
   
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
   }
   
   async createUser(user: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const createdAt = new Date();
-    const newUser: User = { ...user, id, createdAt };
-    this.users.set(id, newUser);
+    const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
   }
   
   async listUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return await db.select().from(users);
   }
   
   async updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-    
-    const updatedUser = { ...user, ...data };
-    this.users.set(id, updatedUser);
+    const [updatedUser] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, id))
+      .returning();
     return updatedUser;
   }
   
   // Document management
   async createDocument(document: InsertDocument): Promise<Document> {
-    const id = this.documentIdCounter++;
-    const createdAt = new Date();
-    const updatedAt = createdAt;
-    const newDocument: Document = { ...document, id, createdAt, updatedAt };
-    this.documents.set(id, newDocument);
+    // Insert document
+    const [newDocument] = await db
+      .insert(documents)
+      .values(document)
+      .returning();
     
-    // Also create initial version
+    // Create initial version
     await this.createDocumentVersion({
-      documentId: id,
+      documentId: newDocument.id,
       version: 1,
       content: document.content,
       createdById: document.createdById
@@ -191,7 +186,11 @@ export class MemStorage implements IStorage {
   }
   
   async getDocument(id: number): Promise<Document | undefined> {
-    return this.documents.get(id);
+    const [document] = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.id, id));
+    return document;
   }
   
   async listDocuments(options: {
@@ -200,35 +199,47 @@ export class MemStorage implements IStorage {
     limit?: number;
     offset?: number;
   } = {}): Promise<Document[]> {
-    let docs = Array.from(this.documents.values());
+    let query = db.select().from(documents);
     
+    // Apply filters
+    const filters = [];
     if (options.createdById !== undefined) {
-      docs = docs.filter(doc => doc.createdById === options.createdById);
+      filters.push(eq(documents.createdById, options.createdById));
     }
     
     if (options.status !== undefined) {
-      docs = docs.filter(doc => doc.status === options.status);
+      filters.push(eq(documents.status, options.status));
     }
     
-    // Sort by updated date, newest first
-    docs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    if (filters.length > 0) {
+      query = query.where(and(...filters));
+    }
     
-    // Handle pagination
-    const offset = options.offset || 0;
-    const limit = options.limit || docs.length;
+    // Apply sorting
+    query = query.orderBy(desc(documents.updatedAt));
     
-    return docs.slice(offset, offset + limit);
+    // Apply pagination
+    if (options.limit !== undefined) {
+      query = query.limit(options.limit);
+    }
+    
+    if (options.offset !== undefined) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
   }
   
   async updateDocument(id: number, data: Partial<InsertDocument>): Promise<Document | undefined> {
-    const document = this.documents.get(id);
+    // Get the current document
+    const document = await this.getDocument(id);
     if (!document) return undefined;
     
-    // If content is changing, increment version and store old version
+    // If content is changing, create a new version
     if (data.content && data.content !== document.content) {
       const newVersion = document.version + 1;
       
-      // Create a version record for the current content before updating
+      // Create a version record for the new content
       await this.createDocumentVersion({
         documentId: id,
         version: newVersion,
@@ -239,72 +250,75 @@ export class MemStorage implements IStorage {
       data.version = newVersion;
     }
     
-    const updatedDocument: Document = { 
-      ...document, 
-      ...data, 
-      updatedAt: new Date() 
-    };
-    
-    this.documents.set(id, updatedDocument);
+    // Update the document with a new updatedAt timestamp
+    const [updatedDocument] = await db
+      .update(documents)
+      .set({
+        ...data,
+        updatedAt: new Date()
+      })
+      .where(eq(documents.id, id))
+      .returning();
+      
     return updatedDocument;
   }
   
   // Document versions
   async createDocumentVersion(version: InsertDocumentVersion): Promise<DocumentVersion> {
-    const id = this.versionIdCounter++;
-    const createdAt = new Date();
-    const newVersion: DocumentVersion = { ...version, id, createdAt };
-    
-    // Store in a version map where document ID is the key and value is an array of versions
-    if (!this.documentVersions.has(version.documentId)) {
-      this.documentVersions.set(version.documentId, []);
-    }
-    
-    const versions = this.documentVersions.get(version.documentId)!;
-    versions.push(newVersion);
-    
+    const [newVersion] = await db
+      .insert(documentVersions)
+      .values(version)
+      .returning();
     return newVersion;
   }
   
   async getDocumentVersions(documentId: number): Promise<DocumentVersion[]> {
-    return this.documentVersions.get(documentId) || [];
+    return await db
+      .select()
+      .from(documentVersions)
+      .where(eq(documentVersions.documentId, documentId))
+      .orderBy(desc(documentVersions.version));
   }
   
   // Signatures
   async createSignature(signature: InsertSignature): Promise<Signature> {
-    const id = this.signatureIdCounter++;
-    const createdAt = new Date();
-    const newSignature: Signature = { ...signature, id, createdAt };
-    this.signatures.set(id, newSignature);
+    const [newSignature] = await db
+      .insert(signatures)
+      .values(signature)
+      .returning();
     return newSignature;
   }
   
   async getDocumentSignatures(documentId: number): Promise<Signature[]> {
-    return Array.from(this.signatures.values())
-      .filter(sig => sig.documentId === documentId);
+    return await db
+      .select()
+      .from(signatures)
+      .where(eq(signatures.documentId, documentId));
   }
   
   // Audit trail
   async createAuditRecord(record: InsertAuditTrail): Promise<AuditTrail> {
-    const id = this.auditIdCounter++;
-    const timestamp = new Date();
-    const newRecord: AuditTrail = { ...record, id, timestamp };
-    this.auditRecords.set(id, newRecord);
+    const [newRecord] = await db
+      .insert(auditTrail)
+      .values(record)
+      .returning();
     return newRecord;
   }
   
   async getDocumentAuditTrail(documentId: number): Promise<AuditTrail[]> {
-    return Array.from(this.auditRecords.values())
-      .filter(record => record.documentId === documentId)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return await db
+      .select()
+      .from(auditTrail)
+      .where(eq(auditTrail.documentId, documentId))
+      .orderBy(desc(auditTrail.timestamp));
   }
   
   // Compliance deadlines
   async createComplianceDeadline(deadline: InsertComplianceDeadline): Promise<ComplianceDeadline> {
-    const id = this.deadlineIdCounter++;
-    const createdAt = new Date();
-    const newDeadline: ComplianceDeadline = { ...deadline, id, createdAt };
-    this.complianceDeadlines.set(id, newDeadline);
+    const [newDeadline] = await db
+      .insert(complianceDeadlines)
+      .values(deadline)
+      .returning();
     return newDeadline;
   }
   
@@ -315,58 +329,74 @@ export class MemStorage implements IStorage {
     limit?: number;
     offset?: number;
   } = {}): Promise<ComplianceDeadline[]> {
-    let deadlines = Array.from(this.complianceDeadlines.values());
+    let query = db.select().from(complianceDeadlines);
     
+    // Apply filters
+    const filters = [];
     if (options.assigneeId !== undefined) {
-      deadlines = deadlines.filter(d => d.assigneeId === options.assigneeId);
+      filters.push(eq(complianceDeadlines.assigneeId, options.assigneeId));
     }
     
     if (options.status !== undefined) {
-      deadlines = deadlines.filter(d => d.status === options.status);
+      filters.push(eq(complianceDeadlines.status, options.status));
     }
     
     if (options.upcoming === true) {
-      const now = new Date();
-      deadlines = deadlines.filter(d => d.deadline > now);
+      filters.push(gt(complianceDeadlines.deadline, new Date()));
     }
     
-    // Sort by deadline
-    deadlines.sort((a, b) => a.deadline.getTime() - b.deadline.getTime());
+    if (filters.length > 0) {
+      query = query.where(and(...filters));
+    }
     
-    // Handle pagination
-    const offset = options.offset || 0;
-    const limit = options.limit || deadlines.length;
+    // Apply sorting by deadline
+    query = query.orderBy(asc(complianceDeadlines.deadline));
     
-    return deadlines.slice(offset, offset + limit);
+    // Apply pagination
+    if (options.limit !== undefined) {
+      query = query.limit(options.limit);
+    }
+    
+    if (options.offset !== undefined) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
   }
   
   async updateComplianceDeadline(id: number, data: Partial<InsertComplianceDeadline>): Promise<ComplianceDeadline | undefined> {
-    const deadline = this.complianceDeadlines.get(id);
-    if (!deadline) return undefined;
-    
-    const updatedDeadline: ComplianceDeadline = { ...deadline, ...data };
-    this.complianceDeadlines.set(id, updatedDeadline);
+    const [updatedDeadline] = await db
+      .update(complianceDeadlines)
+      .set(data)
+      .where(eq(complianceDeadlines.id, id))
+      .returning();
     return updatedDeadline;
   }
   
   // Templates
   async createTemplate(template: InsertTemplate): Promise<Template> {
-    const id = this.templateIdCounter++;
-    const createdAt = new Date();
-    const updatedAt = createdAt;
-    const newTemplate: Template = { ...template, id, createdAt, updatedAt };
-    this.templates.set(id, newTemplate);
+    const [newTemplate] = await db
+      .insert(templates)
+      .values({
+        ...template,
+        updatedAt: new Date()
+      })
+      .returning();
     return newTemplate;
   }
   
   async getTemplate(id: number): Promise<Template | undefined> {
-    return this.templates.get(id);
+    const [template] = await db
+      .select()
+      .from(templates)
+      .where(eq(templates.id, id));
+    return template;
   }
   
   async listTemplates(): Promise<Template[]> {
-    return Array.from(this.templates.values());
+    return await db.select().from(templates);
   }
 }
 
 // Export a singleton instance of the storage class
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
