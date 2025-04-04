@@ -1,0 +1,44 @@
+Objective
+Create a comprehensive AI-powered compliance application that enables businesses to create, store, sign, verify, and maintain chain of custody for compliance documents. The application should streamline regulatory compliance processes while ensuring document integrity and auditability.
+Context
+This application will be used by compliance officers and employees at organizations that must adhere to strict regulatory requirements across various industries. Users will have varying levels of technical expertise but need a straightforward system to manage compliance documentation. The application should reduce compliance-related administrative burdens while maintaining security and legal validity of all documents.
+Instructions
+
+Develop a modern single-page application using Vite, TypeScript, and TailwindCSS for the frontend
+Implement a secure document storage system using Replit's built-in database
+Create the following core features:
+
+User authentication with role-based access control (admin, compliance officer, employee)
+AI-assisted document generation with customizable templates for different compliance requirements
+Digital signature system with verification mechanisms
+Document versioning and change tracking
+Chain of custody logging for audit trails
+Automated compliance reminders and deadline tracking
+Dashboard with compliance status overview and upcoming requirements
+Search functionality across all stored documents
+
+
+Use a clean, professional design with accessibility features
+Implement proper error handling and validation throughout
+Structure the codebase for maintainability with clear separation of concerns
+
+Constraints
+
+Use only Vite, TypeScript, TailwindCSS, and Replit's built-in database
+Ensure the application works within Replit's environment constraints
+Implement proper security measures for sensitive compliance data
+The application should work efficiently with up to 500 documents and 50 concurrent users
+Avoid using external APIs that might introduce regulatory compliance issues
+Ensure all features work in modern browsers without requiring additional plugins
+
+Desired Output
+A fully functional compliance application with:
+
+Complete source code with TypeScript type definitions
+User authentication system with role-based permissions
+Document management system with versioning
+Digital signature functionality with verification
+Comprehensive audit trail and chain of custody tracking
+Clean, responsive UI built with TailwindCSS
+Basic documentation for setup and usage
+Sample compliance document templates for testing
