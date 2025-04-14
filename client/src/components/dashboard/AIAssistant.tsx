@@ -12,6 +12,27 @@ type AIAssistantProps = {
   suggestedPrompts?: string[];
 };
 
+// Typing indicator animation component
+const TypingIndicator = () => {
+  return (
+    <div className="flex items-start">
+      <div className="flex-shrink-0 mr-3">
+        <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center">
+          <Bot className="text-primary-600" size={16} />
+        </div>
+      </div>
+      
+      <div className="rounded-lg p-3 bg-slate-100 max-w-[85%]">
+        <div className="flex space-x-2">
+          <div className="h-2 w-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="h-2 w-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          <div className="h-2 w-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '600ms' }}></div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function AIAssistant({ 
   initialMessages = [],
   suggestedPrompts = [
@@ -37,7 +58,7 @@ export default function AIAssistant({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -71,7 +92,7 @@ export default function AIAssistant({
         '/api/ai/chat',
         {
           messages: messagesToSend,
-          model: "gpt-4", // Or other model as configured
+          model: "gpt-4o-mini", // Or other model as configured
           temperature: 0.7,
           max_tokens: 500,
           context: "You are a helpful AI assistant specialized in compliance, regulations, and governance. Help users with their compliance tasks, documentation, and provide guidance on regulatory requirements."
@@ -156,6 +177,9 @@ export default function AIAssistant({
                 )}
               </div>
             ))}
+            
+            {isLoading && <TypingIndicator />}
+            
             <div ref={messagesEndRef} />
           </div>
           
