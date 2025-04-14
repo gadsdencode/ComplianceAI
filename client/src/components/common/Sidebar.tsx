@@ -14,6 +14,7 @@ import {
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
 
 type SidebarLinkProps = {
   href: string;
@@ -92,12 +93,13 @@ export default function Sidebar() {
       )}
       
       {/* Mobile Toggle Button */}
-      <button 
+      <Button 
         className="md:hidden fixed top-4 right-4 z-30 bg-slate-800 text-white p-2 rounded-md"
         onClick={toggleMobileSidebar}
+        title="Toggle mobile sidebar"
       >
         {isMobileOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
+      </Button>
       
       {/* Sidebar */}
       <nav 
@@ -114,9 +116,9 @@ export default function Sidebar() {
             </div>
             <span className="ml-2 text-xl font-semibold">ComplianceAI</span>
           </div>
-          <button className="md:hidden text-white focus:outline-none" onClick={toggleMobileSidebar}>
+          <Button className="md:hidden text-white focus:outline-none" onClick={toggleMobileSidebar} title="Close sidebar">
             <X size={20} />
-          </button>
+          </Button>
         </div>
         
         <div className="py-4 px-4 border-b border-slate-700">

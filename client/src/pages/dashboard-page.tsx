@@ -7,12 +7,17 @@ import DocumentsSection from '@/components/dashboard/DocumentsSection';
 import ComplianceCalendar from '@/components/dashboard/ComplianceCalendar';
 import AIAssistant from '@/components/dashboard/AIAssistant';
 import CreateDocumentModal from '@/components/documents/CreateDocumentModal';
-import { DashboardStats, PendingDocumentItem, RecentDocumentItem, ComplianceCalendarItem } from '@/types';
+import EditDeadlineModal from '@/components/compliance/EditDeadlineModal';
+import AddDeadlineModal from '@/components/compliance/AddDeadlineModal';
+import { DashboardStats, PendingDocumentItem, RecentDocumentItem, ComplianceCalendarItem, Template, ComplianceDeadline } from '@/types';
 import { Plus, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditDeadlineModalOpen, setIsEditDeadlineModalOpen] = useState(false);
+  const [isAddDeadlineModalOpen, setIsAddDeadlineModalOpen] = useState(false);
+  const [selectedDeadlineId, setSelectedDeadlineId] = useState<number | null>(null);
   const [, navigate] = useLocation();
   
   // Fetch dashboard stats
@@ -32,9 +37,10 @@ export default function DashboardPage() {
     select: (data) => data.map(doc => ({
       id: doc.id,
       title: doc.title,
-      deadline: doc.expiresAt,
+      deadline: doc.deadline || undefined,
       status: doc.status,
-      actionType: 'sign' // This would be determined by the document type and user role
+      actionType: doc.status === 'pending_approval' ? 'approve' : 
+                 doc.status === 'active' ? 'review' : 'sign'
     })),
   });
 
@@ -64,9 +70,9 @@ export default function DashboardPage() {
       deadline: deadline.deadline,
       type: deadline.type,
       assignee: {
-        id: deadline.assigneeId || 0,
-        name: 'User Name', // In a real implementation, you'd fetch user details
-        initials: 'UN'
+        id: deadline.assignee?.id || 0,
+        name: deadline.assignee?.name || 'User Name',
+        initials: deadline.assignee?.name?.slice(0, 2) || 'UN'
       },
       status: deadline.status
     })),
@@ -76,9 +82,18 @@ export default function DashboardPage() {
   const {
     data: templates,
     isLoading: isLoadingTemplates
-  } = useQuery({
+  } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
     enabled: isCreateModalOpen, // Only fetch when modal is open
+  });
+
+  // Fetch deadline details when editing
+  const {
+    data: selectedDeadline,
+    isLoading: isLoadingSelectedDeadline
+  } = useQuery<ComplianceDeadline>({
+    queryKey: ['/api/compliance-deadlines', selectedDeadlineId],
+    enabled: isEditDeadlineModalOpen && selectedDeadlineId !== null,
   });
 
   const handleCreateDocument = () => {
@@ -90,18 +105,25 @@ export default function DashboardPage() {
   };
 
   const handleViewDeadline = (id: number) => {
-    // In a real implementation, this would navigate to compliance deadline details
-    console.log(`View deadline ${id}`);
+    navigate(`/compliance/deadlines/${id}`);
   };
 
   const handleEditDeadline = (id: number) => {
-    // In a real implementation, this would open a modal to edit the deadline
-    console.log(`Edit deadline ${id}`);
+    setSelectedDeadlineId(id);
+    setIsEditDeadlineModalOpen(true);
+  };
+
+  const handleCloseEditDeadlineModal = () => {
+    setIsEditDeadlineModalOpen(false);
+    setSelectedDeadlineId(null);
   };
 
   const handleAddDeadline = () => {
-    // In a real implementation, this would open a modal to add a new deadline
-    console.log('Add new deadline');
+    setIsAddDeadlineModalOpen(true);
+  };
+
+  const handleCloseAddDeadlineModal = () => {
+    setIsAddDeadlineModalOpen(false);
   };
 
   return (
@@ -155,6 +177,22 @@ export default function DashboardPage() {
           onClose={handleCloseModal}
           templates={templates || []}
           isLoadingTemplates={isLoadingTemplates}
+        />
+      )}
+
+      {isEditDeadlineModalOpen && selectedDeadline && (
+        <EditDeadlineModal
+          isOpen={isEditDeadlineModalOpen}
+          onClose={handleCloseEditDeadlineModal}
+          deadline={selectedDeadline}
+          isLoading={isLoadingSelectedDeadline}
+        />
+      )}
+
+      {isAddDeadlineModalOpen && (
+        <AddDeadlineModal
+          isOpen={isAddDeadlineModalOpen}
+          onClose={handleCloseAddDeadlineModal}
         />
       )}
     </DashboardLayout>

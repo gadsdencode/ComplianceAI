@@ -1,11 +1,15 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import { Express, Request, Response } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
+import { User as SelectUser, User } from "@shared/schema";
+import dotenv from "dotenv";
+
+dotenv.config();
+
 
 declare global {
   namespace Express {
@@ -98,8 +102,7 @@ export function setupAuth(app: Express) {
       });
       
       // Remove password from response
-      const userResponse = { ...user };
-      delete userResponse.password;
+      const { password, ...userResponse } = user;
 
       req.login(user, (err) => {
         if (err) return next(err);
@@ -111,7 +114,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: Error | null, user: User, info: any) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });
@@ -121,8 +124,7 @@ export function setupAuth(app: Express) {
         if (loginErr) return next(loginErr);
         
         // Remove password from response
-        const userResponse = { ...user };
-        delete userResponse.password;
+        const { password, ...userResponse } = user;
         
         res.status(200).json(userResponse);
       });
@@ -140,8 +142,7 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     // Remove password from response
-    const userResponse = { ...req.user };
-    delete userResponse.password;
+    const { password, ...userResponse } = req.user;
     
     res.json(userResponse);
   });
@@ -151,7 +152,7 @@ export function setupAuth(app: Express) {
 export function requireRole(role: string | string[]) {
   const roles = Array.isArray(role) ? role : [role];
   
-  return (req: Express.Request, res: Express.Response, next: Express.NextFunction) => {
+  return (req: Request, res: Response, next: Function) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }

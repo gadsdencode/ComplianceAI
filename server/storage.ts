@@ -54,6 +54,7 @@ export interface IStorage {
     offset?: number;
   }): Promise<ComplianceDeadline[]>;
   updateComplianceDeadline(id: number, data: Partial<InsertComplianceDeadline>): Promise<ComplianceDeadline | undefined>;
+  getComplianceDeadline(id: number): Promise<ComplianceDeadline | undefined>;
   
   // Templates
   createTemplate(template: InsertTemplate): Promise<Template>;
@@ -61,11 +62,11 @@ export interface IStorage {
   listTemplates(): Promise<Template[]>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
   
   constructor() {
     this.sessionStore = new PostgresSessionStore({ 
@@ -199,7 +200,10 @@ export class DatabaseStorage implements IStorage {
     limit?: number;
     offset?: number;
   } = {}): Promise<Document[]> {
-    let query = db.select().from(documents);
+    const baseQuery = db.select().from(documents);
+    type QueryType = typeof baseQuery;
+    
+    let query = baseQuery;
     
     // Apply filters
     const filters = [];
@@ -208,23 +212,23 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (options.status !== undefined) {
-      filters.push(eq(documents.status, options.status));
+      filters.push(eq(documents.status, options.status as "draft" | "pending_approval" | "active" | "expired" | "archived"));
     }
     
     if (filters.length > 0) {
-      query = query.where(and(...filters));
+      query = query.where(and(...filters)) as QueryType;
     }
     
     // Apply sorting
-    query = query.orderBy(desc(documents.updatedAt));
+    query = query.orderBy(desc(documents.updatedAt)) as QueryType;
     
     // Apply pagination
     if (options.limit !== undefined) {
-      query = query.limit(options.limit);
+      query = query.limit(options.limit) as QueryType;
     }
     
     if (options.offset !== undefined) {
-      query = query.offset(options.offset);
+      query = query.offset(options.offset) as QueryType;
     }
     
     return await query;
@@ -329,7 +333,10 @@ export class DatabaseStorage implements IStorage {
     limit?: number;
     offset?: number;
   } = {}): Promise<ComplianceDeadline[]> {
-    let query = db.select().from(complianceDeadlines);
+    const baseQuery = db.select().from(complianceDeadlines);
+    type QueryType = typeof baseQuery;
+    
+    let query = baseQuery;
     
     // Apply filters
     const filters = [];
@@ -338,7 +345,7 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (options.status !== undefined) {
-      filters.push(eq(complianceDeadlines.status, options.status));
+      filters.push(eq(complianceDeadlines.status, options.status as "not_started" | "in_progress" | "completed" | "overdue"));
     }
     
     if (options.upcoming === true) {
@@ -346,19 +353,19 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (filters.length > 0) {
-      query = query.where(and(...filters));
+      query = query.where(and(...filters)) as QueryType;
     }
     
     // Apply sorting by deadline
-    query = query.orderBy(asc(complianceDeadlines.deadline));
+    query = query.orderBy(asc(complianceDeadlines.deadline)) as QueryType;
     
     // Apply pagination
     if (options.limit !== undefined) {
-      query = query.limit(options.limit);
+      query = query.limit(options.limit) as QueryType;
     }
     
     if (options.offset !== undefined) {
-      query = query.offset(options.offset);
+      query = query.offset(options.offset) as QueryType;
     }
     
     return await query;
@@ -371,6 +378,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(complianceDeadlines.id, id))
       .returning();
     return updatedDeadline;
+  }
+  
+  async getComplianceDeadline(id: number): Promise<ComplianceDeadline | undefined> {
+    const [deadline] = await db
+      .select()
+      .from(complianceDeadlines)
+      .where(eq(complianceDeadlines.id, id));
+    return deadline;
   }
   
   // Templates

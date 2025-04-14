@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Bell, Search, Menu } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "../ui/button";
 
 type HeaderProps = {
   pageTitle: string;
@@ -43,7 +44,11 @@ export default function Header({
             />
           </div>
           
-          <button className="relative">
+          <Button 
+            title="Toggle mobile sidebar"
+            className="relative"
+            onClick={toggleMobileSidebar}
+          >
             <Bell className="h-5 w-5 text-slate-600" />
             {notificationCount > 0 && (
               <Badge 
@@ -52,14 +57,15 @@ export default function Header({
                 {notificationCount > 9 ? '9+' : notificationCount}
               </Badge>
             )}
-          </button>
+          </Button>
           
-          <button 
+          <Button 
+            title="Toggle mobile sidebar"
             className="md:hidden text-slate-700"
             onClick={toggleMobileSidebar}
           >
             <Menu className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
       </div>
     </header>

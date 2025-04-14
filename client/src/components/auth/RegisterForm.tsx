@@ -36,7 +36,7 @@ export default function RegisterForm() {
     setErrorMessage(null);
     try {
       await registerMutation.mutateAsync(data);
-    } catch (error) {
+    } catch (error: any) {
       setErrorMessage(error.message || 'Registration failed. Please try again.');
     }
   };

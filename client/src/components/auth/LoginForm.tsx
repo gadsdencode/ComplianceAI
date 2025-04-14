@@ -29,7 +29,7 @@ export default function LoginForm() {
     setErrorMessage(null);
     try {
       await loginMutation.mutateAsync(data);
-    } catch (error) {
+    } catch (error: any) {
       setErrorMessage(error.message || 'Login failed. Please check your credentials.');
     }
   };

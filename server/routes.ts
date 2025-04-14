@@ -7,6 +7,12 @@ import {
   insertComplianceDeadlineSchema, insertTemplateSchema 
 } from "@shared/schema";
 import { aiService } from "./ai-service";
+import OpenAI from "openai";
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -40,7 +46,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const documents = await storage.listDocuments(options);
       res.json(documents);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving documents", error: error.message });
     }
   });
@@ -63,7 +69,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(document);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving document", error: error.message });
     }
   });
@@ -94,7 +100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.status(201).json(document);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating document", error: error.message });
     }
   });
@@ -131,7 +137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(updatedDocument);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error updating document", error: error.message });
     }
   });
@@ -156,7 +162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const versions = await storage.getDocumentVersions(parseInt(req.params.id));
       res.json(versions);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving document versions", error: error.message });
     }
   });
@@ -177,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validation = insertSignatureSchema.safeParse({
         ...req.body,
         documentId: parseInt(req.params.id),
-        userId: req.user.id
+        userId: req.user?.id
       });
       
       if (!validation.success) {
@@ -187,14 +193,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const signature = await storage.createSignature({
         ...req.body,
         documentId: parseInt(req.params.id),
-        userId: req.user.id,
+        userId: req.user?.id,
         ipAddress: req.ip
       });
       
       // Create audit trail record
       await storage.createAuditRecord({
         documentId: document.id,
-        userId: req.user.id,
+        userId: req.user?.id,
         action: "DOCUMENT_SIGNED",
         details: `Document "${document.title}" signed by ${req.user.name}`,
         ipAddress: req.ip
@@ -209,7 +215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.status(201).json(signature);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating signature", error: error.message });
     }
   });
@@ -233,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const signatures = await storage.getDocumentSignatures(parseInt(req.params.id));
       res.json(signatures);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving signatures", error: error.message });
     }
   });
@@ -258,7 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const auditTrail = await storage.getDocumentAuditTrail(parseInt(req.params.id));
       res.json(auditTrail);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving audit trail", error: error.message });
     }
   });
@@ -297,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const deadlines = await storage.listComplianceDeadlines(options);
       res.json(deadlines);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving compliance deadlines", error: error.message });
     }
   });
@@ -315,7 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (deadline.documentId) {
         await storage.createAuditRecord({
           documentId: deadline.documentId,
-          userId: req.user.id,
+          userId: req.user!.id,
           action: "COMPLIANCE_DEADLINE_CREATED",
           details: `Compliance deadline "${deadline.title}" created`,
           ipAddress: req.ip
@@ -323,7 +329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.status(201).json(deadline);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating compliance deadline", error: error.message });
     }
   });
@@ -340,7 +346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (deadline.documentId) {
         await storage.createAuditRecord({
           documentId: deadline.documentId,
-          userId: req.user.id,
+          userId: req.user!.id,
           action: "COMPLIANCE_DEADLINE_UPDATED",
           details: `Compliance deadline "${deadline.title}" updated`,
           ipAddress: req.ip
@@ -348,8 +354,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(deadline);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error updating compliance deadline", error: error.message });
+    }
+  });
+  
+  // Add this new route after the existing compliance deadlines API routes
+  app.get("/api/compliance-deadlines/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const id = parseInt(req.params.id);
+      const deadline = await storage.getComplianceDeadline(id);
+      
+      if (!deadline) {
+        return res.status(404).json({ message: "Compliance deadline not found" });
+      }
+      
+      // Check if employee has access to this deadline
+      if (req.user.role === "employee" && deadline.assigneeId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      res.json(deadline);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving compliance deadline", error: error.message });
     }
   });
   
@@ -362,7 +393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const templates = await storage.listTemplates();
       res.json(templates);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving templates", error: error.message });
     }
   });
@@ -380,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(template);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving template", error: error.message });
     }
   });
@@ -389,7 +420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validation = insertTemplateSchema.safeParse({
         ...req.body,
-        createdById: req.user.id
+        createdById: req.user?.id
       });
       
       if (!validation.success) {
@@ -398,11 +429,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const template = await storage.createTemplate({
         ...req.body,
-        createdById: req.user.id
+        createdById: req.user?.id
       });
       
       res.status(201).json(template);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating template", error: error.message });
     }
   });
@@ -432,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       res.json({ content: generatedContent });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error generating document", error: error.message });
     }
   });
@@ -451,7 +482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const improvedContent = await aiService.improveDocumentContent(content);
       res.json({ content: improvedContent });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error improving document", error: error.message });
     }
   });
@@ -470,7 +501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const complianceCheck = await aiService.checkComplianceIssues(content);
       res.json(complianceCheck);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error checking compliance", error: error.message });
     }
   });
@@ -489,7 +520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const suggestions = await aiService.suggestComplianceActions(currentCompliance);
       res.json({ suggestions });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error generating suggestions", error: error.message });
     }
   });
@@ -506,7 +537,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(usersResponse);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving users", error: error.message });
     }
   });
@@ -587,8 +618,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       res.json(stats);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving dashboard stats", error: error.message });
+    }
+  });
+
+  // AI Chat API
+  app.post("/api/ai/chat", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { messages, model = "gpt-4o-mini", temperature = 0.7, max_tokens = 500, context } = req.body;
+      
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ message: "Invalid request. Messages array is required." });
+      }
+      
+      // Format messages for OpenAI
+      const formattedMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add system message with context if provided
+      if (context) {
+        formattedMessages.unshift({
+          role: "system",
+          content: context
+        });
+      }
+      
+      const response = await openai.chat.completions.create({
+        model,
+        messages: formattedMessages,
+        temperature,
+        max_tokens,
+      });
+      
+      // Create an audit record for the AI interaction
+      await storage.createAuditRecord({
+        userId: req.user!.id,
+        action: "AI_CHAT_INTERACTION",
+        details: `User interaction with AI assistant`,
+        ipAddress: req.ip
+      });
+      
+      res.json({
+        choices: [
+          {
+            message: {
+              content: response.choices[0]?.message?.content || "I'm sorry, I couldn't process that request."
+            }
+          }
+        ]
+      });
+    } catch (error: any) {
+      console.error("Error in AI chat:", error);
+      res.status(500).json({ 
+        message: "Error processing AI request", 
+        error: error.message 
+      });
     }
   });
 
