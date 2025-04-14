@@ -26,7 +26,7 @@ export default function AIAssistant({
         {
           id: "welcome",
           role: "assistant",
-          content: "Good day! I'm your AI Compliance Assistant. How can I help you with your compliance tasks today?",
+          content: "Hi! I'm your ComplianceAI Assistant. How can I help you with your compliance tasks today?",
           timestamp: new Date().toISOString()
         }
       ]
@@ -59,22 +59,49 @@ export default function AIAssistant({
     setIsLoading(true);
     
     try {
-      // In a real implementation, this would call the backend AI service
-      // Simulate a response for now
-      setTimeout(() => {
-        const assistantMessage: AIMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: getAIResponse(inputValue.trim()),
-          timestamp: new Date().toISOString()
-        };
-        
-        setMessages(prev => [...prev, assistantMessage]);
-        setIsLoading(false);
-      }, 1000);
+      // Format messages for OpenAI API
+      const messagesToSend = messages.concat(userMessage).map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
       
+      // Call OpenAI API through our backend
+      const response = await apiRequest(
+        'POST',
+        '/api/ai/chat',
+        {
+          messages: messagesToSend,
+          model: "gpt-4", // Or other model as configured
+          temperature: 0.7,
+          max_tokens: 500,
+          context: "You are a helpful AI assistant specialized in compliance, regulations, and governance. Help users with their compliance tasks, documentation, and provide guidance on regulatory requirements."
+        }
+      );
+      
+      const responseData = await response.json();
+      
+      // Add AI response to messages
+      const assistantMessage: AIMessage = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: responseData.choices[0].message.content,
+        timestamp: new Date().toISOString()
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Error getting AI response:", error);
+      
+      // Add error message
+      const errorMessage: AIMessage = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "I'm sorry, I encountered an error processing your request. Please try again later.",
+        timestamp: new Date().toISOString()
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -84,24 +111,19 @@ export default function AIAssistant({
     handleSendMessage();
   };
 
-  const getAIResponse = (message: string): string => {
-    if (message.toLowerCase().includes("iso") || message.toLowerCase().includes("documentation")) {
-      return "I'll help you prepare the ISO 27001 documentation. Based on your compliance history, you'll need to update the following:\n\n• Information Security Policy\n• Risk Assessment Methodology\n• Statement of Applicability\n\nWould you like me to create drafts using your latest security protocols?";
-    } else if (message.toLowerCase().includes("meeting") || message.toLowerCase().includes("auditor")) {
-      return "I'll help schedule a meeting with your auditor. Based on your calendar, I see the following available times:\n\n• Thursday, Oct 12 at 10:00 AM\n• Friday, Oct 13 at 2:00 PM\n• Monday, Oct 16 at 11:00 AM\n\nWhich would you prefer?";
-    } else if (message.toLowerCase().includes("checklist") || message.toLowerCase().includes("compliance")) {
-      return "Here's your current compliance checklist status:\n\n✅ Privacy Policy - Updated and active\n⚠️ Data Processing Agreements - 2 pending signatures\n❌ Annual Security Training - Overdue by 12 days\n✅ Vendor Risk Assessments - Complete\n\nWould you like me to prioritize these items for you?";
-    } else {
-      return "I understand you're asking about " + message + ". Let me analyze your compliance requirements and get back to you with the most relevant information. Is there any specific regulation or framework you're concerned about?";
+  // Automatically send the message after setting the input value from a suggestion
+  useEffect(() => {
+    if (inputValue && inputValue.trim() && inputValue === suggestedPrompts.find(p => p === inputValue)) {
+      handleSendMessage();
     }
-  };
+  }, [inputValue]);
 
   return (
     <section className="mb-8">
       <Card className="shadow overflow-hidden border border-slate-200">
         <CardHeader className="p-4 border-b border-slate-200 flex flex-row items-center">
           <Bot className="text-primary-600 mr-2" size={20} />
-          <CardTitle className="text-base font-medium">AI Compliance Assistant</CardTitle>
+          <CardTitle className="text-base font-medium">ComplianceAI Assistant</CardTitle>
         </CardHeader>
         <CardContent className="p-4">
           <div className="space-y-4 mb-4 max-h-[350px] overflow-y-auto custom-scrollbar">
@@ -156,7 +178,7 @@ export default function AIAssistant({
               size="icon"
               className="absolute right-1 top-1 bg-primary-600 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-primary-700"
               onClick={handleSendMessage}
-              disabled={isLoading}
+              disabled={isLoading || !inputValue.trim()}
             >
               <Send className="h-4 w-4" />
             </Button>

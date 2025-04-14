@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DocumentList from '@/components/document/DocumentList';
 import CreateDocumentModal from '@/components/documents/CreateDocumentModal';
-import { Document } from '@/types';
+import { Document, Template } from '@/types';
 import { Plus, Filter } from 'lucide-react';
 
 export default function DocumentsPage() {
@@ -39,7 +39,7 @@ export default function DocumentsPage() {
   const {
     data: templates,
     isLoading: isLoadingTemplates
-  } = useQuery({
+  } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
     enabled: isCreateModalOpen, // Only fetch when modal is open
   });
@@ -130,7 +130,7 @@ export default function DocumentsPage() {
         <CreateDocumentModal
           isOpen={isCreateModalOpen}
           onClose={() => setIsCreateModalOpen(false)}
-          templates={templates || []}
+          templates={templates || [] as Template[]}
           isLoadingTemplates={isLoadingTemplates}
         />
       )}

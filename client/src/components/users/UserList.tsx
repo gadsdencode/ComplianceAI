@@ -79,7 +79,7 @@ export default function UserList({ users, isLoading, error }: UserListProps) {
         description: 'User information has been updated successfully',
       });
       closeEditDialog();
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error updating user',
         description: error.message || 'Failed to update user',
@@ -99,7 +99,7 @@ export default function UserList({ users, isLoading, error }: UserListProps) {
         description: 'User has been deleted successfully',
       });
       closeDeleteDialog();
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error deleting user',
         description: error.message || 'Failed to delete user',

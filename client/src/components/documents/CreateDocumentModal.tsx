@@ -109,7 +109,7 @@ export default function CreateDocumentModal({
       });
 
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating document:", error);
       toast({
         title: "Error",
