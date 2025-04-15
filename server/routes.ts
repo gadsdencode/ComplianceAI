@@ -282,7 +282,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.user.role === "employee") {
         options.assigneeId = req.user.id;
       } else if (req.query.assigneeId) {
-        options.assigneeId = parseInt(req.query.assigneeId as string);
+        const parsedId = parseInt(String(req.query.assigneeId).replace(/[^0-9]/g, ''), 10);
+        options.assigneeId = isNaN(parsedId) ? null : parsedId;
       }
       
       if (req.query.status) {
@@ -294,67 +295,282 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (req.query.limit) {
-        options.limit = parseInt(req.query.limit as string);
+        const limit = parseInt(String(req.query.limit), 10);
+        options.limit = isNaN(limit) ? 10 : limit; // Default to 10 if invalid
       }
       
       if (req.query.offset) {
-        options.offset = parseInt(req.query.offset as string);
+        const offset = parseInt(String(req.query.offset), 10);
+        options.offset = isNaN(offset) ? 0 : offset; // Default to 0 if invalid
       }
+      
+      console.log("Sanitized compliance deadlines query options:", options);
       
       const deadlines = await storage.listComplianceDeadlines(options);
       res.json(deadlines);
     } catch (error: any) {
+      console.error("Error retrieving compliance deadlines:", error);
       res.status(500).json({ message: "Error retrieving compliance deadlines", error: error.message });
     }
   });
   
   app.post("/api/compliance-deadlines", requireRole(["admin", "compliance_officer"]), async (req: Request, res: Response) => {
     try {
-      const validation = insertComplianceDeadlineSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ message: "Invalid deadline data", errors: validation.error.format() });
+      console.log("Original request body:", JSON.stringify(req.body));
+      
+      // First completely sanitize the entire request to prevent any NaN values
+      let safeData = deepSanitizeObject(req.body);
+      console.log("After deep sanitization:", JSON.stringify(safeData));
+      
+      // Process and sanitize the request data - now with safer data
+      let requestData: Record<string, any> = {...safeData};
+      
+      // Handle date conversion
+      if (requestData.deadline) {
+        requestData.deadline = new Date(requestData.deadline);
       }
       
-      const deadline = await storage.createComplianceDeadline(req.body);
+      // Handle assigneeId with proper type handling - additional safety
+      if ('assigneeId' in requestData) {
+        // If null, empty string or "none", set to null
+        if (requestData.assigneeId === null || 
+            requestData.assigneeId === "" || 
+            requestData.assigneeId === "none" || 
+            requestData.assigneeId === "null") {
+          requestData.assigneeId = null;
+        } 
+        // If it's already a number, verify it's not NaN
+        else if (typeof requestData.assigneeId === 'number') {
+          requestData.assigneeId = isNaN(requestData.assigneeId) ? null : requestData.assigneeId;
+        } 
+        // If it's a string that can be parsed as a number
+        else if (typeof requestData.assigneeId === 'string') {
+          // Remove any non-numeric characters first
+          const cleanedValue = requestData.assigneeId.replace(/[^0-9]/g, '');
+          if (cleanedValue === '') {
+            requestData.assigneeId = null;
+          } else {
+            const parsedId = parseInt(cleanedValue, 10);
+            requestData.assigneeId = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // Anything else becomes null
+        else {
+          requestData.assigneeId = null;
+        }
+      }
       
-      // Create audit trail record if related to a document
-      if (deadline.documentId) {
-        await storage.createAuditRecord({
-          documentId: deadline.documentId,
-          userId: req.user!.id,
-          action: "COMPLIANCE_DEADLINE_CREATED",
-          details: `Compliance deadline "${deadline.title}" created`,
-          ipAddress: req.ip
+      console.log("Sanitized request data for create:", JSON.stringify(requestData));
+      
+      // Convert to a clean object to avoid any potential prototype issues
+      const cleanedData: Record<string, any> = {};
+      
+      // Only add properties that exist and have valid values
+      for (const [key, value] of Object.entries(requestData)) {
+        // Special handling for ID fields to ensure they are valid integers or null
+        if (key.toLowerCase().includes('id') && key !== 'documentId') {
+          if (value === null) {
+            cleanedData[key] = null;
+          } else if (typeof value === 'number') {
+            cleanedData[key] = isNaN(value) ? null : value;
+          } else if (typeof value === 'string') {
+            const parsedId = parseInt(value.replace(/[^0-9]/g, ''), 10);
+            cleanedData[key] = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // For non-ID fields, just check if defined
+        else if (value !== undefined) {
+          cleanedData[key] = value;
+        }
+      }
+      
+      console.log("Final cleaned data:", JSON.stringify(cleanedData));
+      
+      try {
+        // Validate the data - full validation for creation
+        const validation = insertComplianceDeadlineSchema.safeParse(cleanedData);
+        if (!validation.success) {
+          return res.status(400).json({ message: "Invalid deadline data", errors: validation.error.format() });
+        }
+        
+        // Use the validated data
+        const validatedData = validation.data;
+        
+        const deadline = await storage.createComplianceDeadline(validatedData);
+        
+        if (deadline.documentId) {
+          await storage.createAuditRecord({
+            documentId: deadline.documentId,
+            userId: req.user!.id,
+            action: "COMPLIANCE_DEADLINE_CREATED",
+            details: `Compliance deadline "${deadline.title}" created`,
+            ipAddress: req.ip
+          });
+        }
+        
+        res.status(201).json(deadline);
+      } catch (dbError: any) {
+        console.error("Database error:", dbError);
+        console.error("Error details:", dbError.detail || "No additional details");
+        console.error("Error query:", dbError.query || "No query available");
+        return res.status(500).json({ 
+          message: "Database error while creating compliance deadline", 
+          error: dbError.message,
+          detail: dbError.detail || null
         });
       }
-      
-      res.status(201).json(deadline);
     } catch (error: any) {
+      console.error("Error creating compliance deadline:", error);
+      console.error("Error stack:", error.stack);
       res.status(500).json({ message: "Error creating compliance deadline", error: error.message });
     }
   });
   
+  /**
+   * Sanitizes an object recursively to ensure all number fields are valid integers
+   * or nulls, preventing any NaN values from reaching the database
+   */
+  function deepSanitizeObject(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(obj)) {
+      // Handle different data types appropriately
+      if (value === null || value === undefined) {
+        // Allow nulls/undefined to pass through
+        result[key] = value;
+      } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        // Recursively sanitize nested objects
+        result[key] = deepSanitizeObject(value);
+      } else if (typeof value === 'string' && key.toLowerCase().includes('id') && key !== 'documentId') {
+        // If field name contains 'id' and is a string, try to parse as integer
+        if (value === '' || value === 'none' || value === 'null') {
+          result[key] = null;
+        } else {
+          const parsed = parseInt(value.replace(/[^0-9-]/g, ''), 10);
+          result[key] = isNaN(parsed) ? null : parsed;
+        }
+      } else if (typeof value === 'number' && isNaN(value) && key.toLowerCase().includes('id')) {
+        // If it's NaN but in an ID field, convert to null
+        result[key] = null;
+      } else {
+        // Pass all other values through unchanged
+        result[key] = value;
+      }
+    }
+    
+    return result;
+  }
+
   app.put("/api/compliance-deadlines/:id", requireRole(["admin", "compliance_officer"]), async (req: Request, res: Response) => {
     try {
-      const deadline = await storage.updateComplianceDeadline(parseInt(req.params.id), req.body);
+      console.log("Original request body:", JSON.stringify(req.body));
       
-      if (!deadline) {
-        return res.status(404).json({ message: "Compliance deadline not found" });
+      // First completely sanitize the entire request to prevent any NaN values
+      let safeData = deepSanitizeObject(req.body);
+      console.log("After deep sanitization:", JSON.stringify(safeData));
+      
+      // Process and sanitize the request data - now with safer data
+      let requestData: Record<string, any> = {...safeData};
+      
+      // Handle date conversion
+      if (requestData.deadline) {
+        requestData.deadline = new Date(requestData.deadline);
       }
       
-      // Create audit trail record if related to a document
-      if (deadline.documentId) {
-        await storage.createAuditRecord({
-          documentId: deadline.documentId,
-          userId: req.user!.id,
-          action: "COMPLIANCE_DEADLINE_UPDATED",
-          details: `Compliance deadline "${deadline.title}" updated`,
-          ipAddress: req.ip
+      // Handle assigneeId with proper type handling - additional safety
+      if ('assigneeId' in requestData) {
+        // If null, empty string or "none", set to null
+        if (requestData.assigneeId === null || 
+            requestData.assigneeId === "" || 
+            requestData.assigneeId === "none" || 
+            requestData.assigneeId === "null") {
+          requestData.assigneeId = null;
+        } 
+        // If it's already a number, verify it's not NaN
+        else if (typeof requestData.assigneeId === 'number') {
+          requestData.assigneeId = isNaN(requestData.assigneeId) ? null : requestData.assigneeId;
+        } 
+        // If it's a string that can be parsed as a number
+        else if (typeof requestData.assigneeId === 'string') {
+          // Remove any non-numeric characters first
+          const cleanedValue = requestData.assigneeId.replace(/[^0-9]/g, '');
+          if (cleanedValue === '') {
+            requestData.assigneeId = null;
+          } else {
+            const parsedId = parseInt(cleanedValue, 10);
+            requestData.assigneeId = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // Anything else becomes null
+        else {
+          requestData.assigneeId = null;
+        }
+      }
+      
+      console.log("Sanitized request data for update:", JSON.stringify(requestData));
+      
+      // Convert to a clean object to avoid any potential prototype issues
+      const cleanedData: Record<string, any> = {};
+      
+      // Only add properties that exist and have valid values
+      for (const [key, value] of Object.entries(requestData)) {
+        // Special handling for ID fields to ensure they are valid integers or null
+        if (key.toLowerCase().includes('id') && key !== 'documentId') {
+          if (value === null) {
+            cleanedData[key] = null;
+          } else if (typeof value === 'number') {
+            cleanedData[key] = isNaN(value) ? null : value;
+          } else if (typeof value === 'string') {
+            const parsedId = parseInt(value.replace(/[^0-9]/g, ''), 10);
+            cleanedData[key] = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // For non-ID fields, just check if defined
+        else if (value !== undefined) {
+          cleanedData[key] = value;
+        }
+      }
+      
+      console.log("Final cleaned data:", JSON.stringify(cleanedData));
+      
+      try {
+        // Parse ID correctly and with a fallback
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+        
+        const deadline = await storage.updateComplianceDeadline(id, cleanedData);
+        
+        if (!deadline) {
+          return res.status(404).json({ message: "Compliance deadline not found" });
+        }
+        
+        // Create audit trail record if related to a document
+        if (deadline.documentId) {
+          await storage.createAuditRecord({
+            documentId: deadline.documentId,
+            userId: req.user!.id,
+            action: "COMPLIANCE_DEADLINE_UPDATED",
+            details: `Compliance deadline "${deadline.title}" updated`,
+            ipAddress: req.ip
+          });
+        }
+        
+        res.json(deadline);
+      } catch (dbError: any) {
+        console.error("Database error:", dbError);
+        console.error("Error details:", dbError.detail || "No additional details");
+        console.error("Error query:", dbError.query || "No query available");
+        return res.status(500).json({ 
+          message: "Database error while updating compliance deadline", 
+          error: dbError.message,
+          detail: dbError.detail || null
         });
       }
-      
-      res.json(deadline);
     } catch (error: any) {
+      console.error("Error updating compliance deadline:", error);
+      console.error("Error stack:", error.stack);
       res.status(500).json({ message: "Error updating compliance deadline", error: error.message });
     }
   });
@@ -366,7 +582,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const id = parseInt(req.params.id);
+      // Parse and validate the ID
+      const rawId = req.params.id;
+      const id = parseInt(String(rawId).replace(/[^0-9]/g, ''), 10);
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid deadline ID format" });
+      }
+      
       const deadline = await storage.getComplianceDeadline(id);
       
       if (!deadline) {
@@ -380,6 +603,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(deadline);
     } catch (error: any) {
+      console.error("Error retrieving compliance deadline:", error);
       res.status(500).json({ message: "Error retrieving compliance deadline", error: error.message });
     }
   });

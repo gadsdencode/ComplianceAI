@@ -319,9 +319,29 @@ export class DatabaseStorage implements IStorage {
   
   // Compliance deadlines
   async createComplianceDeadline(deadline: InsertComplianceDeadline): Promise<ComplianceDeadline> {
+    // Ensure assigneeId is a valid number or null before sending to DB
+    const sanitizedDeadline = { ...deadline };
+    
+    if ('assigneeId' in sanitizedDeadline) {
+      if (sanitizedDeadline.assigneeId === undefined || 
+          (typeof sanitizedDeadline.assigneeId === 'number' && isNaN(sanitizedDeadline.assigneeId))) {
+        sanitizedDeadline.assigneeId = null;
+      }
+    }
+    
+    // Extra safety for any other ID fields
+    Object.keys(sanitizedDeadline).forEach(key => {
+      if (key.toLowerCase().includes('id') && key !== 'id' && key !== 'documentId') {
+        const value = (sanitizedDeadline as any)[key];
+        if (value !== null && typeof value === 'number' && isNaN(value)) {
+          (sanitizedDeadline as any)[key] = null;
+        }
+      }
+    });
+    
     const [newDeadline] = await db
       .insert(complianceDeadlines)
-      .values(deadline)
+      .values(sanitizedDeadline)
       .returning();
     return newDeadline;
   }
@@ -372,9 +392,29 @@ export class DatabaseStorage implements IStorage {
   }
   
   async updateComplianceDeadline(id: number, data: Partial<InsertComplianceDeadline>): Promise<ComplianceDeadline | undefined> {
+    // Extra protection for assigneeId and other ID fields
+    const sanitizedData = { ...data };
+    
+    if ('assigneeId' in sanitizedData) {
+      if (sanitizedData.assigneeId === undefined || 
+          (typeof sanitizedData.assigneeId === 'number' && isNaN(sanitizedData.assigneeId))) {
+        sanitizedData.assigneeId = null;
+      }
+    }
+    
+    // Extra safety for any other ID fields
+    Object.keys(sanitizedData).forEach(key => {
+      if (key.toLowerCase().includes('id') && key !== 'id' && key !== 'documentId') {
+        const value = (sanitizedData as any)[key];
+        if (value !== null && typeof value === 'number' && isNaN(value)) {
+          (sanitizedData as any)[key] = null;
+        }
+      }
+    });
+    
     const [updatedDeadline] = await db
       .update(complianceDeadlines)
-      .set(data)
+      .set(sanitizedData)
       .where(eq(complianceDeadlines.id, id))
       .returning();
     return updatedDeadline;

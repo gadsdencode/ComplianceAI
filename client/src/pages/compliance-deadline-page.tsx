@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useLocation } from 'wouter';
 import { format } from 'date-fns';
-import { CalendarIcon, Clock, FileText, Edit, AlertTriangle, CheckCircle, ArrowLeft, User } from 'lucide-react';
+import { CalendarIcon, Clock, FileText, Edit, AlertTriangle, CheckCircle, ArrowLeft, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
 import EditDeadlineModal from '@/components/compliance/EditDeadlineModal';
-import { ComplianceDeadline } from '@/types';
+import { ComplianceDeadline, User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 const statusColors = {
@@ -32,21 +32,45 @@ export default function ComplianceDeadlinePage() {
   const queryClient = useQueryClient();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
+  // Ensure ID is a valid number
+  const parsedId = id ? parseInt(id, 10) : null;
+  
   const {
     data: deadline,
     isLoading,
     error
   } = useQuery<ComplianceDeadline>({
-    queryKey: ['/api/compliance-deadlines', parseInt(id)],
-    enabled: !!id,
+    queryKey: ['/api/compliance-deadlines', parsedId],
+    enabled: !!parsedId && !isNaN(parsedId),
   });
+  
+  // Create a validated deadline object with guaranteed ID
+  const validatedDeadline = deadline ? {
+    ...deadline,
+    id: parsedId as number // Ensure ID is always the parsed number
+  } : null;
+  
+  // Fetch users data to display assignee name
+  const { data: users } = useQuery<User[]>({
+    queryKey: ['/api/users'],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!deadline?.assigneeId, // Only fetch users if there's an assignee
+  });
+  
+  // Find the assignee user if it exists
+  const assignee = users?.find(user => user.id === deadline?.assigneeId);
   
   const updateStatusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
-      const response = await fetch(`/api/compliance-deadlines/${id}`, {
+      if (!parsedId || isNaN(parsedId)) {
+        throw new Error('Invalid deadline ID');
+      }
+      
+      const response = await fetch(`/api/compliance-deadlines/${parsedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
+        credentials: 'include',
       });
       
       if (!response.ok) {
@@ -56,7 +80,7 @@ export default function ComplianceDeadlinePage() {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/compliance-deadlines', parseInt(id)] });
+      queryClient.invalidateQueries({ queryKey: ['/api/compliance-deadlines', parsedId] });
       toast({
         title: 'Status updated',
         description: 'The deadline status has been updated successfully.',
@@ -80,7 +104,16 @@ export default function ComplianceDeadlinePage() {
   };
   
   const handleEdit = () => {
-    setIsEditModalOpen(true);
+    // Only open edit modal if we have a valid deadline with ID
+    if (validatedDeadline && typeof validatedDeadline.id === 'number') {
+      setIsEditModalOpen(true);
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Cannot edit this deadline: invalid ID',
+        variant: 'destructive',
+      });
+    }
   };
   
   const handleCloseEditModal = () => {
@@ -101,7 +134,7 @@ export default function ComplianceDeadlinePage() {
     );
   }
   
-  if (error || !deadline) {
+  if (error || !validatedDeadline) {
     return (
       <DashboardLayout pageTitle="Compliance Deadline">
         <div className="flex flex-col items-center justify-center py-16">
@@ -115,10 +148,10 @@ export default function ComplianceDeadlinePage() {
     );
   }
   
-  const deadlineDate = new Date(deadline.deadline);
+  const deadlineDate = new Date(validatedDeadline.deadline);
   const isPastDeadline = deadlineDate < new Date();
-  const statusClass = statusColors[deadline.status as keyof typeof statusColors] || statusColors.not_started;
-  const StatusIcon = statusIcons[deadline.status as keyof typeof statusIcons] || statusIcons.not_started;
+  const statusClass = statusColors[validatedDeadline.status as keyof typeof statusColors] || statusColors.not_started;
+  const StatusIcon = statusIcons[validatedDeadline.status as keyof typeof statusIcons] || statusIcons.not_started;
   
   return (
     <DashboardLayout pageTitle="Compliance Deadline">
@@ -134,21 +167,21 @@ export default function ComplianceDeadlinePage() {
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-2xl">{deadline.title}</CardTitle>
+                <CardTitle className="text-2xl">{validatedDeadline.title}</CardTitle>
                 <CardDescription className="mt-2 flex items-center">
                   <CalendarIcon className="h-4 w-4 mr-1" />
                   {format(deadlineDate, "MMMM d, yyyy")}
-                  {isPastDeadline && deadline.status !== 'completed' && (
+                  {isPastDeadline && validatedDeadline.status !== 'completed' && (
                     <Badge variant="destructive" className="ml-2">Past Due</Badge>
                   )}
                 </CardDescription>
               </div>
               <Badge className={`${statusClass} flex items-center gap-1 px-2 py-1`}>
                 {StatusIcon}
-                {deadline.status === 'not_started' && 'Not Started'}
-                {deadline.status === 'in_progress' && 'In Progress'}
-                {deadline.status === 'completed' && 'Completed'}
-                {deadline.status === 'overdue' && 'Overdue'}
+                {validatedDeadline.status === 'not_started' && 'Not Started'}
+                {validatedDeadline.status === 'in_progress' && 'In Progress'}
+                {validatedDeadline.status === 'completed' && 'Completed'}
+                {validatedDeadline.status === 'overdue' && 'Overdue'}
               </Badge>
             </div>
           </CardHeader>
@@ -156,35 +189,35 @@ export default function ComplianceDeadlinePage() {
           <CardContent className="space-y-6">
             <div>
               <h3 className="text-sm font-medium text-slate-500 mb-1">Type</h3>
-              <p className="capitalize">{deadline.type}</p>
+              <p className="capitalize">{validatedDeadline.type}</p>
             </div>
             
-            {deadline.description && (
+            {validatedDeadline.description && (
               <div>
                 <h3 className="text-sm font-medium text-slate-500 mb-1">Description</h3>
-                <p>{deadline.description}</p>
+                <p>{validatedDeadline.description}</p>
               </div>
             )}
             
-            {deadline.assigneeId && (
+            {validatedDeadline.assigneeId && (
               <div>
                 <h3 className="text-sm font-medium text-slate-500 mb-1">Assignee</h3>
                 <div className="flex items-center">
                   <div className="h-8 w-8 rounded-full bg-primary-100 text-primary-800 flex items-center justify-center text-sm font-medium">
-                    <User className="h-4 w-4" />
+                    <UserIcon className="h-4 w-4" />
                   </div>
-                  <span className="ml-2">ID: {deadline.assigneeId}</span>
+                  <span className="ml-2">{assignee?.name || `User ID: ${validatedDeadline.assigneeId}`}</span>
                 </div>
               </div>
             )}
             
-            {deadline.documentId && (
+            {validatedDeadline.documentId && (
               <div>
                 <h3 className="text-sm font-medium text-slate-500 mb-1">Related Document</h3>
                 <Button 
                   variant="link" 
                   className="px-0"
-                  onClick={() => navigate(`/documents/${deadline.documentId}`)}
+                  onClick={() => navigate(`/documents/${validatedDeadline.documentId}`)}
                 >
                   View Document
                 </Button>
@@ -202,16 +235,16 @@ export default function ComplianceDeadlinePage() {
               </Button>
             </div>
             <div className="space-x-2">
-              {deadline.status !== 'completed' && (
+              {validatedDeadline.status !== 'completed' && (
                 <Button 
                   variant="outline" 
                   onClick={handleMarkInProgress}
-                  disabled={deadline.status === 'in_progress' || updateStatusMutation.isPending}
+                  disabled={validatedDeadline.status === 'in_progress' || updateStatusMutation.isPending}
                 >
                   Mark In Progress
                 </Button>
               )}
-              {deadline.status !== 'completed' && (
+              {validatedDeadline.status !== 'completed' && (
                 <Button 
                   onClick={handleMarkComplete}
                   disabled={updateStatusMutation.isPending}
@@ -224,11 +257,11 @@ export default function ComplianceDeadlinePage() {
         </Card>
       </div>
       
-      {isEditModalOpen && deadline && (
+      {isEditModalOpen && validatedDeadline && (
         <EditDeadlineModal
           isOpen={isEditModalOpen}
           onClose={handleCloseEditModal}
-          deadline={deadline}
+          deadline={validatedDeadline}
         />
       )}
     </DashboardLayout>
