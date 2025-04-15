@@ -76,17 +76,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/documents", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({ message: "Unauthorized - You must be logged in to create documents" });
     }
     
     try {
+      console.log("Document creation request body:", JSON.stringify(req.body));
+      console.log("Current user:", req.user ? JSON.stringify({ id: req.user.id, role: req.user.role }) : "No user in session");
+      
       const validation = insertDocumentSchema.safeParse(req.body);
       if (!validation.success) {
+        console.error("Document validation failed:", validation.error.format());
         return res.status(400).json({ message: "Invalid document data", errors: validation.error.format() });
       }
       
-      // Set the created by ID to the current user
-      const documentData = { ...req.body, createdById: req.user.id };
+      // Set the created by ID to the current user, overriding any provided value for security
+      const documentData = { 
+        ...validation.data,
+        createdById: req.user.id 
+      };
+      
+      console.log("Processed document data:", JSON.stringify(documentData));
       
       const document = await storage.createDocument(documentData);
       
@@ -101,7 +110,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(document);
     } catch (error: any) {
-      res.status(500).json({ message: "Error creating document", error: error.message });
+      console.error("Error creating document:", error);
+      console.error("Error stack:", error.stack);
+      res.status(500).json({ 
+        message: "Error creating document", 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+      });
     }
   });
   

@@ -56,7 +56,7 @@ export default function SignaturePanel({
       
       toast({
         title: 'Document signed',
-        description: 'Your signature has been successfully added to the document',
+        description: 'Your signature has been successfully added to the document. The document will now be marked as active.',
       });
     },
     onError: (error) => {
@@ -254,6 +254,24 @@ export default function SignaturePanel({
                   'Sign Document'
                 )}
               </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Message for draft documents */}
+        {documentStatus === 'draft' && (
+          <div className="mt-6 border-t pt-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+              <div className="flex">
+                <Info className="h-5 w-5 text-blue-400 mt-0.5 mr-3" />
+                <div>
+                  <h3 className="text-sm font-medium text-blue-800">Document needs to be submitted first</h3>
+                  <p className="text-sm text-blue-700 mt-1">
+                    This document is still in draft status. To collect signatures, it must first be 
+                    submitted for signature approval. Go to the "Details" tab and click "Submit for Signature".
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

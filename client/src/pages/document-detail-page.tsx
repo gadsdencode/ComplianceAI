@@ -126,6 +126,10 @@ export default function DocumentDetailPage() {
     updateDocumentMutation.mutate({ status: 'active' });
   };
 
+  const handleSubmitForSignature = () => {
+    updateDocumentMutation.mutate({ status: 'pending_approval' });
+  };
+
   // Display error if document couldn't be loaded
   if (documentError) {
     return (
@@ -270,6 +274,11 @@ export default function DocumentDetailPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="flex justify-end space-x-2">
+                    {document.status === 'draft' && (
+                      <Button onClick={handleSubmitForSignature} disabled={updateDocumentMutation.isPending}>
+                        Submit for Signature
+                      </Button>
+                    )}
                     {document.status === 'pending_approval' && (user?.role === 'admin' || user?.role === 'compliance_officer') && (
                       <Button onClick={handleApprove} disabled={updateDocumentMutation.isPending}>
                         Approve Document
