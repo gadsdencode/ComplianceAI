@@ -8,11 +8,20 @@ import {
 } from "@shared/schema";
 import { aiService } from "./ai-service";
 import OpenAI from "openai";
+// @ts-ignore: multer has no types in tsconfig
+import multer from 'multer';
+// @ts-ignore: object-storage types are present but skipLibCheck may hide them
+import { Client } from '@replit/object-storage';
+// @ts-ignore: mime-types has no types in tsconfig
+import mime from 'mime-types';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const upload = multer();
+const objectClient = new Client();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -83,17 +92,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Document creation request body:", JSON.stringify(req.body));
       console.log("Current user:", req.user ? JSON.stringify({ id: req.user.id, role: req.user.role }) : "No user in session");
       
-      const validation = insertDocumentSchema.safeParse(req.body);
+      // Explicitly set the createdById before validation, so it will be included in the validation
+      const documentWithUser = {
+        ...req.body,
+        createdById: req.user.id
+      };
+      
+      const validation = insertDocumentSchema.safeParse(documentWithUser);
       if (!validation.success) {
         console.error("Document validation failed:", validation.error.format());
-        return res.status(400).json({ message: "Invalid document data", errors: validation.error.format() });
+        return res.status(400).json({ 
+          message: "Invalid document data", 
+          errors: validation.error.format(), 
+          details: "The document schema validation failed. Make sure all required fields are provided."
+        });
       }
       
-      // Set the created by ID to the current user, overriding any provided value for security
-      const documentData = { 
-        ...validation.data,
-        createdById: req.user.id 
-      };
+      // The validation succeeded, we can proceed with the validated data
+      const documentData = validation.data;
       
       console.log("Processed document data:", JSON.stringify(documentData));
       
@@ -187,48 +203,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    
     try {
       const document = await storage.getDocument(parseInt(req.params.id));
-      
       if (!document) {
         return res.status(404).json({ message: "Document not found" });
       }
-      
       const validation = insertSignatureSchema.safeParse({
         ...req.body,
         documentId: parseInt(req.params.id),
-        userId: req.user?.id
       });
-      
       if (!validation.success) {
         return res.status(400).json({ message: "Invalid signature data", errors: validation.error.format() });
       }
-      
-      const signature = await storage.createSignature({
-        ...req.body,
-        documentId: parseInt(req.params.id),
-        userId: req.user?.id,
-        ipAddress: req.ip
-      });
-      
-      // Create audit trail record
+      const signature = await storage.createSignature(validation.data);
       await storage.createAuditRecord({
-        documentId: document.id,
-        userId: req.user?.id,
-        action: "DOCUMENT_SIGNED",
-        details: `Document "${document.title}" signed by ${req.user.name}`,
+        documentId: signature.documentId,
+        userId: signature.userId,
+        action: "SIGNATURE_CREATED",
+        details: `Signature by user ${signature.userId}`,
         ipAddress: req.ip
       });
-      
-      // Update document status if needed (e.g., from pending_approval to active)
-      if (document.status === "pending_approval") {
-        await storage.updateDocument(document.id, {
-          status: "active",
-          createdById: document.createdById
-        });
-      }
-      
       res.status(201).json(signature);
     } catch (error: any) {
       res.status(500).json({ message: "Error creating signature", error: error.message });
@@ -919,6 +913,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Error processing AI request", 
         error: error.message 
       });
+    }
+  });
+
+  // Document Files API
+  app.post("/api/documents/:id/files", upload.single('file'), async (req: any, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    const objectName = `documents/${documentId}/${Date.now()}-${file.originalname}`;
+    try {
+      const uploadResult = await objectClient.uploadFromBytes(objectName, file.buffer);
+      if (!uploadResult.ok) {
+        return res.status(500).json({ message: "Error uploading file", error: uploadResult.error });
+      }
+      await storage.createAuditRecord({
+        documentId,
+        userId: req.user.id,
+        action: "FILE_UPLOADED",
+        details: `Uploaded file ${file.originalname}`,
+        ipAddress: req.ip
+      });
+      res.status(201).json({ name: file.originalname, key: objectName });
+    } catch (err: any) {
+      res.status(500).json({ message: "Error uploading file", error: err.message });
+    }
+  });
+
+  app.get("/api/documents/:id/files", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    try {
+      const listResult = await objectClient.list({ prefix: `documents/${documentId}/` });
+      if (!listResult.ok) {
+        return res.status(500).json({ message: "Error listing files", error: listResult.error });
+      }
+      const files = listResult.value.map(f => ({ name: f.name.split('/').slice(2).join('/'), key: f.name }));
+      res.json(files);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error listing files", error: err.message });
+    }
+  });
+
+  app.get("/api/documents/:id/files/:fileName", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    const fileName = req.params.fileName;
+    const objectKey = `documents/${documentId}/${fileName}`;
+    try {
+      const existsResult = await objectClient.exists(objectKey);
+      if (!existsResult.ok) {
+        return res.status(500).json({ message: "Error checking file", error: existsResult.error });
+      }
+      if (!existsResult.value) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      const stream = objectClient.downloadAsStream(objectKey);
+      const contentType = mime.lookup(fileName) as string || 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      stream.pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error downloading file", error: err.message });
+    }
+  });
+
+  app.delete("/api/documents/:id/files/:fileName", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    const fileName = req.params.fileName;
+    const objectKey = `documents/${documentId}/${fileName}`;
+    try {
+      const deleteResult = await objectClient.delete(objectKey);
+      if (!deleteResult.ok) {
+        return res.status(500).json({ message: "Error deleting file", error: deleteResult.error });
+      }
+      await storage.createAuditRecord({
+        documentId,
+        userId: req.user.id,
+        action: "FILE_DELETED",
+        details: `Deleted file ${fileName}`,
+        ipAddress: req.ip
+      });
+      res.sendStatus(204);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error deleting file", error: err.message });
+    }
+  });
+
+  // Add this endpoint after your existing document file endpoints
+  app.get("/api/documents/files", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const listResult = await objectClient.list({ prefix: 'documents/' });
+      if (!listResult.ok) {
+        return res.status(500).json({ message: "Error listing files", error: listResult.error });
+      }
+      
+      // Transform the results to include document IDs
+      const files = listResult.value.map(file => {
+        const parts = file.name.split('/');
+        if (parts.length >= 2) {
+          return {
+            name: parts.slice(2).join('/'),
+            key: file.name,
+            documentId: parseInt(parts[1], 10)
+          };
+        }
+        return null;
+      }).filter(Boolean);
+      
+      res.json(files);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error listing all files", error: err.message });
     }
   });
 

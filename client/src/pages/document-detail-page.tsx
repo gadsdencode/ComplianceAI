@@ -13,6 +13,7 @@ import DocumentDetail from '@/components/document/DocumentDetail';
 import SignaturePanel from '@/components/document/SignaturePanel';
 import DocumentVersionHistory from '@/components/document/DocumentVersionHistory';
 import AuditTrailTable from '@/components/document/AuditTrailTable';
+import FileManagerPanel from '@/components/document/FileManagerPanel';
 import DocumentEditor from '@/components/document/DocumentEditor';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -260,6 +261,10 @@ export default function DocumentDetailPage() {
               <CheckSquare className="h-4 w-4 mr-2" />
               Audit Trail
             </TabsTrigger>
+            <TabsTrigger value="files">
+              <FileText className="h-4 w-4 mr-2" />
+              Files
+            </TabsTrigger>
           </TabsList>
           
           <div className="mt-6">
@@ -318,6 +323,10 @@ export default function DocumentDetailPage() {
                 auditTrail={auditTrail || []} 
                 isLoading={isLoadingAudit}
               />
+            </TabsContent>
+            
+            <TabsContent value="files">
+              <FileManagerPanel documentId={document.id} />
             </TabsContent>
           </div>
         </Tabs>

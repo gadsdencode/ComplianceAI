@@ -11,7 +11,8 @@ import {
   Settings, 
   LogOut,
   Menu,
-  X
+  X,
+  Database
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -70,6 +71,7 @@ export default function Sidebar() {
   const links = [
     { href: "/", icon: <LayoutDashboard size={20} />, label: "Dashboard" },
     { href: "/documents", icon: <FileText size={20} />, label: "Documents" },
+    { href: "/document-dashboard", icon: <Database size={20} />, label: "Document Dashboard" },
     { href: "/templates", icon: <Copy size={20} />, label: "Templates" },
     { href: "/signatures", icon: <PenTool size={20} />, label: "Signatures" },
     { href: "/audit", icon: <CheckSquare size={20} />, label: "Audit Trails" },
