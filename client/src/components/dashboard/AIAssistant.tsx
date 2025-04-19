@@ -93,8 +93,8 @@ export default function AIAssistant({
         {
           messages: messagesToSend,
           model: "gpt-4o-mini", // Or other model as configured
-          temperature: 0.7,
-          max_tokens: 500,
+          temperature: 0.5,
+          max_tokens: 1000,
           context: "You are a helpful AI assistant specialized in compliance, regulations, and governance. Help users with their compliance tasks, documentation, and provide guidance on regulatory requirements."
         }
       );

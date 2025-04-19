@@ -7,7 +7,6 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard-page";
-import DocumentsPage from "@/pages/documents-page";
 import TemplatesPage from "@/pages/templates-page";
 import SignaturesPage from "@/pages/signatures-page";
 import AuditPage from "@/pages/audit-page";
@@ -15,13 +14,14 @@ import UsersPage from "@/pages/users-page";
 import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
 import ComplianceDeadlinePage from '@/pages/compliance-deadline-page';
+import DocumentRepositoryPage from '@/pages/document-repository-page';
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={DashboardPage} />
-      <ProtectedRoute path="/documents" component={DocumentsPage} />
-      <ProtectedRoute path="/documents/:id" component={DocumentDetailPage} />
+      <ProtectedRoute path="/document-repository" component={DocumentRepositoryPage} />
+      <ProtectedRoute path="/document-repository/:id" component={DocumentDetailPage} />
       <ProtectedRoute path="/templates" component={TemplatesPage} />
       <ProtectedRoute path="/signatures" component={SignaturesPage} />
       <ProtectedRoute path="/audit" component={AuditPage} />

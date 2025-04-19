@@ -69,7 +69,7 @@ export default function Sidebar() {
 
   const links = [
     { href: "/", icon: <LayoutDashboard size={20} />, label: "Dashboard" },
-    { href: "/documents", icon: <FileText size={20} />, label: "Documents" },
+    { href: "/document-repository", icon: <FileText size={20} />, label: "Documents" },
     { href: "/templates", icon: <Copy size={20} />, label: "Templates" },
     { href: "/signatures", icon: <PenTool size={20} />, label: "Signatures" },
     { href: "/audit", icon: <CheckSquare size={20} />, label: "Audit Trails" },

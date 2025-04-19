@@ -1,10 +1,21 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import cors from "cors";
+import dotenv from "dotenv";
+import bodyParser from "body-parser";
+import fileUpload from "express-fileupload";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cors());
+app.use(bodyParser.json());
+app.use(fileUpload({
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max file size
+  useTempFiles: true,
+  tempFileDir: '/tmp/'
+}));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -30,6 +41,53 @@ app.use((req, res, next) => {
       }
 
       log(logLine);
+    }
+  });
+
+  next();
+});
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path = req.path;
+  
+  // Log file upload request details
+  if (path === '/api/user-documents/upload' && req.method === 'POST') {
+    console.log('📁 File upload request received:');
+    console.log('- Content-Type:', req.headers['content-type']);
+    console.log('- Content-Length:', req.headers['content-length']);
+    console.log('- Has files object:', req.files ? 'Yes' : 'No');
+    if (req.files) {
+      console.log('- Files keys:', Object.keys(req.files));
+    }
+  }
+  
+  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+  const originalResJson = res.json;
+  res.json = function (bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path.startsWith("/api")) {
+      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "…";
+      }
+
+      log(logLine);
+      
+      // Additional logging for file upload responses
+      if (path === '/api/user-documents/upload') {
+        console.log(`📁 File upload response: ${res.statusCode}`);
+      }
     }
   });
 

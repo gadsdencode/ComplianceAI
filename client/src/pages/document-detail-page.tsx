@@ -107,7 +107,7 @@ export default function DocumentDetailPage() {
   });
 
   const handleBack = () => {
-    navigate('/documents');
+    navigate('/document-repository');
   };
 
   const handleEdit = () => {
@@ -137,7 +137,7 @@ export default function DocumentDetailPage() {
           <h3 className="text-lg font-medium mb-2">Error loading document</h3>
           <p className="text-slate-600 mb-4">{documentError.message || 'Failed to load document'}</p>
           <Button onClick={handleBack}>
-            Back to Documents
+            Back to Document Repository
           </Button>
         </div>
       </DashboardLayout>
