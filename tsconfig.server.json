@@ -3,12 +3,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "outDir": "dist/server",
     "noEmit": false,
     "allowImportingTsExtensions": false,
+    "esModuleInterop": true,
     "rootDir": "."
   },
-  "include": ["server/**/*", "shared/**/*", "server/index.ts"],
+  "include": ["server/**/*", "shared/**/*"],
   "exclude": ["node_modules", "client"]
 }
