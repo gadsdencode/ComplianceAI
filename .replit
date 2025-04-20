@@ -7,11 +7,12 @@ channel = "stable-24_05"
 
 [env]
 REPLIT_DISABLE_PACKAGE_LAYER = "1"
+NODE_ENV = "development"
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+build = ["sh", "-c", "npm run build && node verify-build.js"]
+run = ["sh", "-c", "NODE_ENV=production node dist/server/index.js"]
 
 [[ports]]
 localPort = 5000

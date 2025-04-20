@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build": "npm install && vite build && tsc -p tsconfig.server.json",
+    "build": "npm install && vite build && tsc -p tsconfig.server.json && mkdir -p dist/server/public && cp -r client/public dist/server/ 2>/dev/null || true",
     "drizzle:generate": "drizzle-kit generate:pg --schema=shared/schema.ts",
     "drizzle:push": "drizzle-kit push:pg --schema=shared/schema.ts",
     "migrate": "tsx server/run-migrations.ts",

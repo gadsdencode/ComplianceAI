@@ -6,8 +6,9 @@
     "moduleResolution": "bundler",
     "outDir": "dist/server",
     "noEmit": false,
-    "allowImportingTsExtensions": false
+    "allowImportingTsExtensions": false,
+    "rootDir": "."
   },
-  "include": ["server/**/*", "shared/**/*"],
+  "include": ["server/**/*", "shared/**/*", "server/index.ts"],
   "exclude": ["node_modules", "client"]
 }
