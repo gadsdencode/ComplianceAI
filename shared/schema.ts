@@ -101,7 +101,9 @@ export const userDocuments = pgTable("user_documents", {
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
-export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDocumentSchema = createInsertSchema(documents)
+  .partial({ createdById: true })
+  .omit({ id: true, createdAt: true, updatedAt: true });
 export const insertDocumentVersionSchema = createInsertSchema(documentVersions).omit({ id: true, createdAt: true });
 export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: true, createdAt: true });
 export const insertAuditTrailSchema = createInsertSchema(auditTrail).omit({ id: true, timestamp: true });

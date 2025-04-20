@@ -13,6 +13,7 @@ import DocumentDetail from '@/components/document/DocumentDetail';
 import SignaturePanel from '@/components/document/SignaturePanel';
 import DocumentVersionHistory from '@/components/document/DocumentVersionHistory';
 import AuditTrailTable from '@/components/document/AuditTrailTable';
+import FileManagerPanel from '@/components/document/FileManagerPanel';
 import DocumentEditor from '@/components/document/DocumentEditor';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -124,6 +125,10 @@ export default function DocumentDetailPage() {
 
   const handleApprove = () => {
     updateDocumentMutation.mutate({ status: 'active' });
+  };
+
+  const handleSubmitForSignature = () => {
+    updateDocumentMutation.mutate({ status: 'pending_approval' });
   };
 
   // Display error if document couldn't be loaded
@@ -256,6 +261,10 @@ export default function DocumentDetailPage() {
               <CheckSquare className="h-4 w-4 mr-2" />
               Audit Trail
             </TabsTrigger>
+            <TabsTrigger value="files">
+              <FileText className="h-4 w-4 mr-2" />
+              Files
+            </TabsTrigger>
           </TabsList>
           
           <div className="mt-6">
@@ -270,6 +279,11 @@ export default function DocumentDetailPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="flex justify-end space-x-2">
+                    {document.status === 'draft' && (
+                      <Button onClick={handleSubmitForSignature} disabled={updateDocumentMutation.isPending}>
+                        Submit for Signature
+                      </Button>
+                    )}
                     {document.status === 'pending_approval' && (user?.role === 'admin' || user?.role === 'compliance_officer') && (
                       <Button onClick={handleApprove} disabled={updateDocumentMutation.isPending}>
                         Approve Document
@@ -309,6 +323,10 @@ export default function DocumentDetailPage() {
                 auditTrail={auditTrail || []} 
                 isLoading={isLoadingAudit}
               />
+            </TabsContent>
+            
+            <TabsContent value="files">
+              <FileManagerPanel documentId={document.id} />
             </TabsContent>
           </div>
         </Tabs>
