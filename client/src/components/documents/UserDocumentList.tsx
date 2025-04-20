@@ -76,13 +76,16 @@ export default function UserDocumentList({
   };
 
   const handleDownload = (doc: UserDocument) => {
+    // For direct downloads, we'll use a standard browser download instead of the API
+    const downloadUrl = window.location.origin + doc.fileUrl;
+    
     // Create a temporary link and trigger download
     const link = window.document.createElement('a');
-    link.href = doc.fileUrl;
-    link.download = doc.fileName;
-    window.document.body.appendChild(link);
+    link.href = downloadUrl;
+    link.setAttribute('download', doc.fileName); // This forces download instead of navigation
+    document.body.appendChild(link);
     link.click();
-    window.document.body.removeChild(link);
+    document.body.removeChild(link);
   };
 
   if (isLoading) {

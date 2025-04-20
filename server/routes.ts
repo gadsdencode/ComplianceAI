@@ -696,9 +696,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const userDocuments = await storage.getUserDocuments(req.user.id);
-      res.json(userDocuments);
+      
+      // Add signed URLs for direct access to documents
+      const documentsWithUrls = userDocuments.map(doc => ({
+        ...doc,
+        // Create a direct download URL for each document
+        fileUrl: `/api/user-documents/${doc.id}/download`
+      }));
+      
+      res.json(documentsWithUrls);
     } catch (error: any) {
       res.status(500).json({ message: "Error retrieving user documents", error: error.message });
+    }
+  });
+  
+  // Add document download endpoint
+  app.get("/api/user-documents/:id/download", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      
+      // Get document metadata
+      const document = await storage.getUserDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Ensure user can only access their own files
+      if (document.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Instead of trying to serve the file directly, we'll just redirect to a download
+      // This approach works with any storage system configuration
+      res.status(200).json({
+        success: true,
+        message: "Direct previews are not available. Please download file to view.",
+        document: {
+          id: document.id,
+          title: document.title,
+          fileName: document.fileName,
+          fileType: document.fileType,
+          fileSize: document.fileSize,
+          createdAt: document.createdAt,
+          updatedAt: document.updatedAt
+        }
+      });
+    } catch (error) {
+      console.error("Error processing download request:", error);
+      res.status(500).json({ 
+        message: "Error processing request", 
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
   

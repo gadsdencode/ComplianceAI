@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { UserDocument } from '@/types';
-import { Download, X, FileText, AlertTriangle, Loader2 } from 'lucide-react';
+import { Download, X, FileText, AlertTriangle, Loader2, Info } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface DocumentViewerProps {
@@ -12,10 +11,10 @@ interface DocumentViewerProps {
 }
 
 export default function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleDownload = () => {
+    // Create a direct link to download the file
     const link = window.document.createElement('a');
     link.href = document.fileUrl;
     link.download = document.fileName;
@@ -24,30 +23,42 @@ export default function DocumentViewer({ document, isOpen, onClose }: DocumentVi
     window.document.body.removeChild(link);
   };
 
-  const handleIframeLoad = () => {
-    setIsLoading(false);
+  // Determine if the file is an image type
+  const isImageType = (fileType: string) => {
+    return fileType.startsWith('image/');
   };
 
-  const handleIframeError = () => {
-    setIsLoading(false);
-    setError('Failed to load document preview.');
+  // Get file icon and description
+  const getFileInfo = () => {
+    if (isImageType(document.fileType)) {
+      return {
+        description: 'Image file',
+        icon: <FileText className="mx-auto h-12 w-12 text-blue-400 mb-4" />
+      };
+    } else if (document.fileType === 'application/pdf') {
+      return {
+        description: 'PDF document',
+        icon: <FileText className="mx-auto h-12 w-12 text-red-400 mb-4" />
+      };
+    } else if (document.fileType.includes('word') || document.fileType.includes('document')) {
+      return {
+        description: 'Word document',
+        icon: <FileText className="mx-auto h-12 w-12 text-blue-600 mb-4" />
+      };
+    } else if (document.fileType.includes('excel') || document.fileType.includes('sheet')) {
+      return {
+        description: 'Excel spreadsheet',
+        icon: <FileText className="mx-auto h-12 w-12 text-green-600 mb-4" />
+      };
+    } else {
+      return {
+        description: 'Document',
+        icon: <FileText className="mx-auto h-12 w-12 text-slate-400 mb-4" />
+      };
+    }
   };
 
-  // Determine if we can preview the document based on file type
-  const canPreview = () => {
-    const previewableTypes = [
-      'application/pdf',
-      'image/png',
-      'image/jpeg',
-      'image/gif',
-      'image/svg+xml',
-      'text/plain',
-      'text/csv',
-      'text/html'
-    ];
-
-    return previewableTypes.includes(document.fileType);
-  };
+  const fileInfo = getFileInfo();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -66,52 +77,32 @@ export default function DocumentViewer({ document, isOpen, onClose }: DocumentVi
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
-          {canPreview() ? (
-            <div className="relative h-full">
-              {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 z-10">
-                  <div className="text-center">
-                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-500 mb-2" />
-                    <p className="text-sm text-slate-600">Loading document...</p>
+          <div className="h-full flex items-center justify-center bg-slate-50">
+            <div className="text-center p-8 max-w-md">
+              {fileInfo.icon}
+              <h3 className="text-lg font-medium mb-2">{document.fileName}</h3>
+              <p className="text-slate-600 mb-2">{fileInfo.description}</p>
+              <p className="text-sm text-slate-500 mb-6">
+                {(document.fileSize / 1024 / 1024).toFixed(2)} MB
+              </p>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+                <div className="flex">
+                  <Info className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-blue-800">
+                      Preview is currently unavailable. Please download the file to view its contents.
+                    </p>
                   </div>
                 </div>
-              )}
+              </div>
               
-              <iframe
-                src={document.fileUrl}
-                className="w-full h-full border-0"
-                onLoad={handleIframeLoad}
-                onError={handleIframeError}
-                title={document.title}
-              />
+              <Button onClick={handleDownload} size="lg">
+                <Download className="h-4 w-4 mr-2" />
+                Download File
+              </Button>
             </div>
-          ) : (
-            <div className="h-full flex items-center justify-center bg-slate-50">
-              <div className="text-center p-8">
-                <FileText className="mx-auto h-12 w-12 text-slate-400 mb-4" />
-                <h3 className="text-lg font-medium mb-2">Preview not available</h3>
-                <p className="text-slate-600 mb-6">This file type cannot be previewed. Please download the file to view it.</p>
-                <Button onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="h-full flex items-center justify-center bg-slate-50">
-              <div className="text-center p-8">
-                <AlertTriangle className="mx-auto h-12 w-12 text-error-500 mb-4" />
-                <h3 className="text-lg font-medium mb-2">Error Loading Preview</h3>
-                <p className="text-slate-600 mb-6">{error}</p>
-                <Button onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Instead
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

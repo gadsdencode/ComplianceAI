@@ -85,7 +85,7 @@ export default function DocumentRepositoryPage() {
       if (metadata.description) formData.append('description', metadata.description);
       if (metadata.tags) formData.append('tags', JSON.stringify(metadata.tags));
       
-      const response = await fetch('/api/user-documents', {
+      const response = await fetch('/api/user-documents/upload', {
         method: 'POST',
         body: formData,
       });
