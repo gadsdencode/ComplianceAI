@@ -146,3 +146,18 @@ export interface AITemplateGeneration {
     [key: string]: any;
   };
 }
+
+// User Document related types
+export interface UserDocument {
+  id: number;
+  userId: number;
+  title: string;
+  description?: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  fileUrl: string;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+}

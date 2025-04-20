@@ -1,8 +1,9 @@
-import { users, documents, documentVersions, signatures, auditTrail, complianceDeadlines, templates } from "@shared/schema";
+import { users, documents, documentVersions, signatures, auditTrail, complianceDeadlines, templates, userDocuments } from "@shared/schema";
 import type { 
   User, InsertUser, Document, InsertDocument, DocumentVersion, InsertDocumentVersion,
   Signature, InsertSignature, AuditTrail, InsertAuditTrail, 
-  ComplianceDeadline, InsertComplianceDeadline, Template, InsertTemplate 
+  ComplianceDeadline, InsertComplianceDeadline, Template, InsertTemplate,
+  UserDocument, InsertUserDocument
 } from "@shared/schema";
 import session from "express-session";
 import { eq, gt, desc, asc, and, sql } from "drizzle-orm";
@@ -60,6 +61,12 @@ export interface IStorage {
   createTemplate(template: InsertTemplate): Promise<Template>;
   getTemplate(id: number): Promise<Template | undefined>;
   listTemplates(): Promise<Template[]>;
+  
+  // User Documents Repository
+  getUserDocuments(userId: number): Promise<UserDocument[]>;
+  getUserDocument(id: number): Promise<UserDocument | undefined>;
+  createUserDocument(document: InsertUserDocument): Promise<UserDocument>;
+  deleteUserDocument(id: number): Promise<void>;
   
   // Session store
   sessionStore: session.Store;
@@ -450,6 +457,40 @@ export class DatabaseStorage implements IStorage {
   
   async listTemplates(): Promise<Template[]> {
     return await db.select().from(templates);
+  }
+
+  // User Documents Repository - using database
+  async getUserDocuments(userId: number): Promise<UserDocument[]> {
+    return await db
+      .select()
+      .from(userDocuments)
+      .where(eq(userDocuments.userId, userId))
+      .orderBy(desc(userDocuments.updatedAt));
+  }
+  
+  async getUserDocument(id: number): Promise<UserDocument | undefined> {
+    const [document] = await db
+      .select()
+      .from(userDocuments)
+      .where(eq(userDocuments.id, id));
+    return document;
+  }
+  
+  async createUserDocument(document: InsertUserDocument): Promise<UserDocument> {
+    const [newDocument] = await db
+      .insert(userDocuments)
+      .values({
+        ...document,
+        updatedAt: new Date()
+      })
+      .returning();
+    return newDocument;
+  }
+  
+  async deleteUserDocument(id: number): Promise<void> {
+    await db
+      .delete(userDocuments)
+      .where(eq(userDocuments.id, id));
   }
 }
 

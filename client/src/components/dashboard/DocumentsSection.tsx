@@ -119,10 +119,15 @@ export default function DocumentsSection({
     }
   };
 
+  // View all documents handler
+  const handleViewAll = () => {
+    navigate('/document-repository');
+  };
+
   return (
     <section className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Pending Action Documents */}
-      <DocumentsCard title="Documents Requiring Action" viewAllHref="/documents?filter=pending">
+      <DocumentsCard title="Documents Requiring Action" viewAllHref="/document-repository?filter=pending">
         {pendingDocuments.length === 0 ? (
           <div className="text-center p-6 text-slate-500">
             <CheckSquare className="mx-auto h-8 w-8 text-slate-400 mb-2" />
@@ -153,7 +158,7 @@ export default function DocumentsSection({
                   variant="outline"
                   size="sm"
                   className="px-3 py-1 h-auto text-xs" 
-                  onClick={() => navigate(`/documents/${doc.id}`)}
+                  onClick={() => navigate(`/document-repository/${doc.id}`)}
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   View
@@ -161,7 +166,7 @@ export default function DocumentsSection({
                 <Button 
                   size="sm"
                   className="px-3 py-1 h-auto text-xs"
-                  onClick={() => navigate(`/documents/${doc.id}?action=${doc.actionType}`)}
+                  onClick={() => navigate(`/document-repository/${doc.id}?action=${doc.actionType}`)}
                 >
                   {doc.actionType === "sign" ? "Sign" : 
                    doc.actionType === "review" ? "Review" : "Approve"}
@@ -173,7 +178,7 @@ export default function DocumentsSection({
       </DocumentsCard>
       
       {/* Recent Documents */}
-      <DocumentsCard title="Recently Updated Documents" viewAllHref="/documents">
+      <DocumentsCard title="Recently Updated Documents" viewAllHref="/document-repository">
         {recentDocuments.length === 0 ? (
           <div className="text-center p-6 text-slate-500">
             <FileText className="mx-auto h-8 w-8 text-slate-400 mb-2" />
@@ -190,7 +195,7 @@ export default function DocumentsSection({
             </thead>
             <tbody className="divide-y divide-slate-200">
               {recentDocuments.map((doc) => (
-                <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/documents/${doc.id}`)}>
+                <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/document-repository/${doc.id}`)}>
                   <td className="px-3 py-3 whitespace-nowrap">
                     <div className="flex items-center">
                       <FileText className="text-slate-400 mr-2 text-lg" size={18} />

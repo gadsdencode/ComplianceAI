@@ -8,12 +8,17 @@ import {
 } from "@shared/schema";
 import { aiService } from "./ai-service";
 import OpenAI from "openai";
+import { Client as ObjectStorageClient } from "@replit/object-storage";
+import dotenv from "dotenv";
 // @ts-ignore: multer has no types in tsconfig
 import multer from 'multer';
 // @ts-ignore: object-storage types are present but skipLibCheck may hide them
 import { Client } from '@replit/object-storage';
 // @ts-ignore: mime-types has no types in tsconfig
 import mime from 'mime-types';
+
+// Initialize environment variables
+dotenv.config();
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -915,6 +920,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  // User Document Repository API
+  app.get("/api/user-documents", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const userDocuments = await storage.getUserDocuments(req.user.id);
+      
+      // Add signed URLs for direct access to documents
+      const documentsWithUrls = userDocuments.map(doc => ({
+        ...doc,
+        // Create a direct download URL for each document
+        fileUrl: `/api/user-documents/${doc.id}/download`
+      }));
+      
+      res.json(documentsWithUrls);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving user documents", error: error.message });
+    }
+  });
+  
+  // Add document download endpoint
+  app.get("/api/user-documents/:id/download", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      
+      // Get document metadata
+      const document = await storage.getUserDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Ensure user can only access their own files
+      if (document.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Instead of trying to serve the file directly, we'll just redirect to a download
+      // This approach works with any storage system configuration
+      res.status(200).json({
+        success: true,
+        message: "Direct previews are not available. Please download file to view.",
+        document: {
+          id: document.id,
+          title: document.title,
+          fileName: document.fileName,
+          fileType: document.fileType,
+          fileSize: document.fileSize,
+          createdAt: document.createdAt,
+          updatedAt: document.updatedAt
+        }
+      });
+    } catch (error) {
+      console.error("Error processing download request:", error);
+      res.status(500).json({ 
+        message: "Error processing request", 
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  app.post("/api/user-documents/upload", async (req: Request & { files?: any, user?: any }, res: Response) => {
+    try {
+      // Debug logging
+      console.log("Upload request received");
+      console.log("Request body:", req.body);
+      console.log("Files:", req.files);
+      console.log("User:", req.user);
+
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // More detailed file validation
+      if (!req.files) {
+        console.error("No files object in request");
+        return res.status(400).json({ message: "No files were uploaded" });
+      }
+      
+      if (!req.files.file) {
+        console.error("No file with key 'file' in request.files");
+        return res.status(400).json({ message: "No file found with key 'file'" });
+      }
+      
+      const file = req.files.file;
+      
+      // Handle both array and single file
+      const uploadedFile = Array.isArray(file) ? file[0] : file;
+      
+      // More validation
+      if (!uploadedFile.name || !uploadedFile.mimetype || !uploadedFile.size) {
+        console.error("Invalid file object:", uploadedFile);
+        return res.status(400).json({ message: "Invalid file object" });
+      }
+      
+      // Parse metadata with better error handling
+      let metadata: {
+        title?: string;
+        description?: string | null;
+        tags?: string[];
+      } = {};
+      
+      if (req.body.metadata) {
+        try {
+          metadata = JSON.parse(req.body.metadata);
+        } catch (error) {
+          console.error("Error parsing metadata:", error);
+          console.log("Raw metadata received:", req.body.metadata);
+          // Continue with empty metadata instead of failing
+        }
+      }
+      
+      console.log("Processing file:", uploadedFile.name);
+      console.log("File type:", uploadedFile.mimetype);
+      console.log("File size:", uploadedFile.size);
+      
+      // For storage in Replit Object Storage
+      const timestamp = Date.now();
+      const sanitizedFileName = uploadedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const objectName = `${req.user.id}/${timestamp}-${sanitizedFileName}`;
+      
+      try {
+        // Initialize Object Storage client with the specified bucket ID
+        console.log("Initializing Object Storage client with bucket ID: replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826");
+        const objectStorage = new ObjectStorageClient({
+          bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+        });
+        
+        console.log("Attempting to upload file:", objectName);
+        // Upload file to Object Storage
+        const uploadResult = await objectStorage.uploadFromBytes(
+          objectName, 
+          uploadedFile.data
+        );
+        
+        if (!uploadResult.ok) {
+          console.error("Error uploading to storage:", uploadResult.error);
+          console.error("Error details:", JSON.stringify(uploadResult, null, 2));
+          return res.status(500).json({ 
+            message: "Error uploading file to storage", 
+            error: uploadResult.error,
+            details: uploadResult
+          });
+        }
+        
+        // Create a new document record
+        const newDocument = await storage.createUserDocument({
+          userId: req.user.id,
+          title: metadata.title || uploadedFile.name,
+          description: metadata.description || null,
+          fileName: uploadedFile.name,
+          fileType: uploadedFile.mimetype,
+          fileSize: uploadedFile.size,
+          fileUrl: objectName, // Store the object path in storage bucket
+          tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+        });
+        
+        console.log("Document created successfully:", newDocument);
+        res.status(201).json(newDocument);
+      } catch (error: any) {
+        console.error("Object storage error:", error);
+        console.error("Error details:", JSON.stringify(error, null, 2));
+        res.status(500).json({ 
+          message: "Error uploading document", 
+          error: error.message,
+          details: error.code || error.name || "unknown_error",
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+      }
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      res.status(500).json({ 
+        message: "Error uploading document", 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+  
+  app.delete("/api/user-documents/:id", async (req: Request, res: Response) => {
 
   // Document Files API
   app.post("/api/documents/:id/files", upload.single('file'), async (req: any, res: Response) => {
@@ -1014,11 +1205,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add this endpoint after your existing document file endpoints
   app.get("/api/documents/files", async (req: Request, res: Response) => {
+
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     
     try {
+      const documentId = parseInt(req.params.id);
+      
+      // Check if document exists and belongs to user
+      const document = await storage.getUserDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      if (document.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Delete from object storage if it exists
+      if (document.fileUrl) {
+        try {
+          const objectStorage = new ObjectStorageClient({
+            bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+          });
+          
+          // Delete the file from storage
+          await objectStorage.delete(document.fileUrl);
+        } catch (storageError) {
+          console.error("Error deleting file from storage:", storageError);
+          // Continue with deletion even if storage deletion fails
+        }
+      }
+      
+      // Delete the document
+      await storage.deleteUserDocument(documentId);
+      
+      res.status(200).json({ message: "Document deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting document", error: error.message });
       const listResult = await objectClient.list({ prefix: 'documents/' });
       if (!listResult.ok) {
         return res.status(500).json({ message: "Error listing files", error: listResult.error });

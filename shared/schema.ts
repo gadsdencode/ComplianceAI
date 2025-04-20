@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -75,13 +75,28 @@ export const complianceDeadlines = pgTable("compliance_deadlines", {
 // Templates schema
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
   content: text("content").notNull(),
-  category: text("category"),
-  createdById: integer("created_by_id").references(() => users.id).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  category: varchar("category", { length: 100 }),
+  createdById: integer("created_by_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   isDefault: boolean("is_default").default(false),
+});
+
+// User documents table
+export const userDocuments = pgTable("user_documents", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileType: varchar("file_type", { length: 100 }).notNull(),
+  fileSize: integer("file_size").notNull(),
+  fileUrl: text("file_url").notNull(),
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Insert schemas
@@ -116,3 +131,6 @@ export type InsertComplianceDeadline = z.infer<typeof insertComplianceDeadlineSc
 
 export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+
+export type UserDocument = typeof userDocuments.$inferSelect;
+export type InsertUserDocument = typeof userDocuments.$inferInsert;
