@@ -7,13 +7,20 @@ import DocumentsSection from '@/components/dashboard/DocumentsSection';
 import ComplianceCalendar from '@/components/dashboard/ComplianceCalendar';
 import AIAssistant from '@/components/dashboard/AIAssistant';
 import CreateDocumentModal from '@/components/documents/CreateDocumentModal';
-import { DashboardStats, PendingDocumentItem, RecentDocumentItem, ComplianceCalendarItem } from '@/types';
+import EditDeadlineModal from '@/components/compliance/EditDeadlineModal';
+import AddDeadlineModal from '@/components/compliance/AddDeadlineModal';
+import { DashboardStats, PendingDocumentItem, RecentDocumentItem, ComplianceCalendarItem, Template, ComplianceDeadline, User } from '@/types';
 import { Plus, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditDeadlineModalOpen, setIsEditDeadlineModalOpen] = useState(false);
+  const [isAddDeadlineModalOpen, setIsAddDeadlineModalOpen] = useState(false);
+  const [selectedDeadlineId, setSelectedDeadlineId] = useState<number | null>(null);
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   
   // Fetch dashboard stats
   const { 
@@ -32,9 +39,10 @@ export default function DashboardPage() {
     select: (data) => data.map(doc => ({
       id: doc.id,
       title: doc.title,
-      deadline: doc.expiresAt,
+      deadline: doc.deadline || undefined,
       status: doc.status,
-      actionType: 'sign' // This would be determined by the document type and user role
+      actionType: doc.status === 'pending_approval' ? 'approve' : 
+                 doc.status === 'active' ? 'review' : 'sign'
     })),
   });
 
@@ -58,28 +66,54 @@ export default function DashboardPage() {
     isLoading: isLoadingDeadlines
   } = useQuery<ComplianceCalendarItem[]>({
     queryKey: ['/api/compliance-deadlines', { upcoming: true }],
-    select: (data) => data.map(deadline => ({
-      id: deadline.id,
-      title: deadline.title,
-      deadline: deadline.deadline,
-      type: deadline.type,
-      assignee: {
-        id: deadline.assigneeId || 0,
-        name: 'User Name', // In a real implementation, you'd fetch user details
-        initials: 'UN'
-      },
-      status: deadline.status
-    })),
+    select: (data: any[]) => data.map(deadline => {
+      // Find the assignee user if available
+      const assigneeUser = users?.find(user => user.id === deadline.assigneeId);
+      
+      return {
+        id: deadline.id,
+        title: deadline.title,
+        deadline: deadline.deadline,
+        type: deadline.type,
+        assignee: {
+          id: assigneeUser?.id || 0,
+          name: assigneeUser?.name || 'Unassigned',
+          initials: assigneeUser?.name?.slice(0, 2)?.toUpperCase() || 'UN'
+        },
+        status: deadline.status
+      };
+    }),
+  });
+
+  // Fetch users for assignee information
+  const { data: users } = useQuery<User[]>({
+    queryKey: ['/api/users'],
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Fetch templates for create document modal
   const {
     data: templates,
     isLoading: isLoadingTemplates
-  } = useQuery({
+  } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
     enabled: isCreateModalOpen, // Only fetch when modal is open
   });
+
+  // Fetch deadline details when editing
+  const {
+    data: selectedDeadline,
+    isLoading: isLoadingSelectedDeadline
+  } = useQuery<ComplianceDeadline>({
+    queryKey: ['/api/compliance-deadlines', selectedDeadlineId],
+    enabled: isEditDeadlineModalOpen && selectedDeadlineId !== null,
+  });
+
+  // Create a validated deadline object to ensure ID is properly set
+  const validatedSelectedDeadline = selectedDeadline && selectedDeadlineId ? {
+    ...selectedDeadline,
+    id: selectedDeadlineId
+  } : null;
 
   const handleCreateDocument = () => {
     setIsCreateModalOpen(true);
@@ -90,18 +124,33 @@ export default function DashboardPage() {
   };
 
   const handleViewDeadline = (id: number) => {
-    // In a real implementation, this would navigate to compliance deadline details
-    console.log(`View deadline ${id}`);
+    navigate(`/compliance/deadlines/${id}`);
   };
 
   const handleEditDeadline = (id: number) => {
-    // In a real implementation, this would open a modal to edit the deadline
-    console.log(`Edit deadline ${id}`);
+    if (!id || isNaN(id)) {
+      toast({
+        title: 'Error',
+        description: 'Cannot edit deadline: Invalid ID',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSelectedDeadlineId(id);
+    setIsEditDeadlineModalOpen(true);
+  };
+
+  const handleCloseEditDeadlineModal = () => {
+    setIsEditDeadlineModalOpen(false);
+    setSelectedDeadlineId(null);
   };
 
   const handleAddDeadline = () => {
-    // In a real implementation, this would open a modal to add a new deadline
-    console.log('Add new deadline');
+    setIsAddDeadlineModalOpen(true);
+  };
+
+  const handleCloseAddDeadlineModal = () => {
+    setIsAddDeadlineModalOpen(false);
   };
 
   return (
@@ -155,6 +204,22 @@ export default function DashboardPage() {
           onClose={handleCloseModal}
           templates={templates || []}
           isLoadingTemplates={isLoadingTemplates}
+        />
+      )}
+
+      {isEditDeadlineModalOpen && validatedSelectedDeadline && (
+        <EditDeadlineModal
+          isOpen={isEditDeadlineModalOpen}
+          onClose={handleCloseEditDeadlineModal}
+          deadline={validatedSelectedDeadline}
+          isLoading={isLoadingSelectedDeadline}
+        />
+      )}
+
+      {isAddDeadlineModalOpen && (
+        <AddDeadlineModal
+          isOpen={isAddDeadlineModalOpen}
+          onClose={handleCloseAddDeadlineModal}
         />
       )}
     </DashboardLayout>

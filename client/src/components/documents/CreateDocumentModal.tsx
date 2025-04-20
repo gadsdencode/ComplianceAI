@@ -9,6 +9,7 @@ import { FileText, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 type CreateDocumentModalProps = {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export default function CreateDocumentModal({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (isOpen) {
@@ -47,6 +49,15 @@ export default function CreateDocumentModal({
   }, [isOpen]);
 
   const handleSubmit = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to create documents",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!title.trim()) {
       toast({
         title: "Missing information",
@@ -91,11 +102,14 @@ export default function CreateDocumentModal({
         title,
         content,
         status: "draft",
-        templateId: selectedTemplateId
+        templateId: selectedTemplateId,
+        createdById: user.id // Explicitly include user ID even though the server should add it
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create document");
+        const errorData = await response.json();
+        console.error("Server error response:", errorData);
+        throw new Error(`Failed to create document: ${JSON.stringify(errorData)}`);
       }
 
       const newDocument = await response.json();
@@ -109,8 +123,16 @@ export default function CreateDocumentModal({
       });
 
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating document:", error);
+      
+      // Log the exact format we're sending
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
       toast({
         title: "Error",
         description: error.message || "Failed to create document",

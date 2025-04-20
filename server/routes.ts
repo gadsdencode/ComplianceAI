@@ -7,6 +7,21 @@ import {
   insertComplianceDeadlineSchema, insertTemplateSchema 
 } from "@shared/schema";
 import { aiService } from "./ai-service";
+import OpenAI from "openai";
+// @ts-ignore: multer has no types in tsconfig
+import multer from 'multer';
+// @ts-ignore: object-storage types are present but skipLibCheck may hide them
+import { Client } from '@replit/object-storage';
+// @ts-ignore: mime-types has no types in tsconfig
+import mime from 'mime-types';
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const upload = multer();
+const objectClient = new Client();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -40,7 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const documents = await storage.listDocuments(options);
       res.json(documents);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving documents", error: error.message });
     }
   });
@@ -63,24 +78,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(document);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving document", error: error.message });
     }
   });
   
   app.post("/api/documents", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({ message: "Unauthorized - You must be logged in to create documents" });
     }
     
     try {
-      const validation = insertDocumentSchema.safeParse(req.body);
+      console.log("Document creation request body:", JSON.stringify(req.body));
+      console.log("Current user:", req.user ? JSON.stringify({ id: req.user.id, role: req.user.role }) : "No user in session");
+      
+      // Explicitly set the createdById before validation, so it will be included in the validation
+      const documentWithUser = {
+        ...req.body,
+        createdById: req.user.id
+      };
+      
+      const validation = insertDocumentSchema.safeParse(documentWithUser);
       if (!validation.success) {
-        return res.status(400).json({ message: "Invalid document data", errors: validation.error.format() });
+        console.error("Document validation failed:", validation.error.format());
+        return res.status(400).json({ 
+          message: "Invalid document data", 
+          errors: validation.error.format(), 
+          details: "The document schema validation failed. Make sure all required fields are provided."
+        });
       }
       
-      // Set the created by ID to the current user
-      const documentData = { ...req.body, createdById: req.user.id };
+      // The validation succeeded, we can proceed with the validated data
+      const documentData = validation.data;
+      
+      console.log("Processed document data:", JSON.stringify(documentData));
       
       const document = await storage.createDocument(documentData);
       
@@ -94,8 +125,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.status(201).json(document);
-    } catch (error) {
-      res.status(500).json({ message: "Error creating document", error: error.message });
+    } catch (error: any) {
+      console.error("Error creating document:", error);
+      console.error("Error stack:", error.stack);
+      res.status(500).json({ 
+        message: "Error creating document", 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+      });
     }
   });
   
@@ -131,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(updatedDocument);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error updating document", error: error.message });
     }
   });
@@ -156,7 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const versions = await storage.getDocumentVersions(parseInt(req.params.id));
       res.json(versions);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving document versions", error: error.message });
     }
   });
@@ -166,50 +203,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    
     try {
       const document = await storage.getDocument(parseInt(req.params.id));
-      
       if (!document) {
         return res.status(404).json({ message: "Document not found" });
       }
-      
       const validation = insertSignatureSchema.safeParse({
         ...req.body,
         documentId: parseInt(req.params.id),
-        userId: req.user.id
       });
-      
       if (!validation.success) {
         return res.status(400).json({ message: "Invalid signature data", errors: validation.error.format() });
       }
-      
-      const signature = await storage.createSignature({
-        ...req.body,
-        documentId: parseInt(req.params.id),
-        userId: req.user.id,
-        ipAddress: req.ip
-      });
-      
-      // Create audit trail record
+      const signature = await storage.createSignature(validation.data);
       await storage.createAuditRecord({
-        documentId: document.id,
-        userId: req.user.id,
-        action: "DOCUMENT_SIGNED",
-        details: `Document "${document.title}" signed by ${req.user.name}`,
+        documentId: signature.documentId,
+        userId: signature.userId,
+        action: "SIGNATURE_CREATED",
+        details: `Signature by user ${signature.userId}`,
         ipAddress: req.ip
       });
-      
-      // Update document status if needed (e.g., from pending_approval to active)
-      if (document.status === "pending_approval") {
-        await storage.updateDocument(document.id, {
-          status: "active",
-          createdById: document.createdById
-        });
-      }
-      
       res.status(201).json(signature);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating signature", error: error.message });
     }
   });
@@ -233,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const signatures = await storage.getDocumentSignatures(parseInt(req.params.id));
       res.json(signatures);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving signatures", error: error.message });
     }
   });
@@ -258,7 +273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const auditTrail = await storage.getDocumentAuditTrail(parseInt(req.params.id));
       res.json(auditTrail);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving audit trail", error: error.message });
     }
   });
@@ -276,7 +291,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.user.role === "employee") {
         options.assigneeId = req.user.id;
       } else if (req.query.assigneeId) {
-        options.assigneeId = parseInt(req.query.assigneeId as string);
+        const parsedId = parseInt(String(req.query.assigneeId).replace(/[^0-9]/g, ''), 10);
+        options.assigneeId = isNaN(parsedId) ? null : parsedId;
       }
       
       if (req.query.status) {
@@ -288,68 +304,316 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (req.query.limit) {
-        options.limit = parseInt(req.query.limit as string);
+        const limit = parseInt(String(req.query.limit), 10);
+        options.limit = isNaN(limit) ? 10 : limit; // Default to 10 if invalid
       }
       
       if (req.query.offset) {
-        options.offset = parseInt(req.query.offset as string);
+        const offset = parseInt(String(req.query.offset), 10);
+        options.offset = isNaN(offset) ? 0 : offset; // Default to 0 if invalid
       }
+      
+      console.log("Sanitized compliance deadlines query options:", options);
       
       const deadlines = await storage.listComplianceDeadlines(options);
       res.json(deadlines);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error retrieving compliance deadlines:", error);
       res.status(500).json({ message: "Error retrieving compliance deadlines", error: error.message });
     }
   });
   
   app.post("/api/compliance-deadlines", requireRole(["admin", "compliance_officer"]), async (req: Request, res: Response) => {
     try {
-      const validation = insertComplianceDeadlineSchema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ message: "Invalid deadline data", errors: validation.error.format() });
+      console.log("Original request body:", JSON.stringify(req.body));
+      
+      // First completely sanitize the entire request to prevent any NaN values
+      let safeData = deepSanitizeObject(req.body);
+      console.log("After deep sanitization:", JSON.stringify(safeData));
+      
+      // Process and sanitize the request data - now with safer data
+      let requestData: Record<string, any> = {...safeData};
+      
+      // Handle date conversion
+      if (requestData.deadline) {
+        requestData.deadline = new Date(requestData.deadline);
       }
       
-      const deadline = await storage.createComplianceDeadline(req.body);
+      // Handle assigneeId with proper type handling - additional safety
+      if ('assigneeId' in requestData) {
+        // If null, empty string or "none", set to null
+        if (requestData.assigneeId === null || 
+            requestData.assigneeId === "" || 
+            requestData.assigneeId === "none" || 
+            requestData.assigneeId === "null") {
+          requestData.assigneeId = null;
+        } 
+        // If it's already a number, verify it's not NaN
+        else if (typeof requestData.assigneeId === 'number') {
+          requestData.assigneeId = isNaN(requestData.assigneeId) ? null : requestData.assigneeId;
+        } 
+        // If it's a string that can be parsed as a number
+        else if (typeof requestData.assigneeId === 'string') {
+          // Remove any non-numeric characters first
+          const cleanedValue = requestData.assigneeId.replace(/[^0-9]/g, '');
+          if (cleanedValue === '') {
+            requestData.assigneeId = null;
+          } else {
+            const parsedId = parseInt(cleanedValue, 10);
+            requestData.assigneeId = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // Anything else becomes null
+        else {
+          requestData.assigneeId = null;
+        }
+      }
       
-      // Create audit trail record if related to a document
-      if (deadline.documentId) {
-        await storage.createAuditRecord({
-          documentId: deadline.documentId,
-          userId: req.user.id,
-          action: "COMPLIANCE_DEADLINE_CREATED",
-          details: `Compliance deadline "${deadline.title}" created`,
-          ipAddress: req.ip
+      console.log("Sanitized request data for create:", JSON.stringify(requestData));
+      
+      // Convert to a clean object to avoid any potential prototype issues
+      const cleanedData: Record<string, any> = {};
+      
+      // Only add properties that exist and have valid values
+      for (const [key, value] of Object.entries(requestData)) {
+        // Special handling for ID fields to ensure they are valid integers or null
+        if (key.toLowerCase().includes('id') && key !== 'documentId') {
+          if (value === null) {
+            cleanedData[key] = null;
+          } else if (typeof value === 'number') {
+            cleanedData[key] = isNaN(value) ? null : value;
+          } else if (typeof value === 'string') {
+            const parsedId = parseInt(value.replace(/[^0-9]/g, ''), 10);
+            cleanedData[key] = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // For non-ID fields, just check if defined
+        else if (value !== undefined) {
+          cleanedData[key] = value;
+        }
+      }
+      
+      console.log("Final cleaned data:", JSON.stringify(cleanedData));
+      
+      try {
+        // Validate the data - full validation for creation
+        const validation = insertComplianceDeadlineSchema.safeParse(cleanedData);
+        if (!validation.success) {
+          return res.status(400).json({ message: "Invalid deadline data", errors: validation.error.format() });
+        }
+        
+        // Use the validated data
+        const validatedData = validation.data;
+        
+        const deadline = await storage.createComplianceDeadline(validatedData);
+        
+        if (deadline.documentId) {
+          await storage.createAuditRecord({
+            documentId: deadline.documentId,
+            userId: req.user!.id,
+            action: "COMPLIANCE_DEADLINE_CREATED",
+            details: `Compliance deadline "${deadline.title}" created`,
+            ipAddress: req.ip
+          });
+        }
+        
+        res.status(201).json(deadline);
+      } catch (dbError: any) {
+        console.error("Database error:", dbError);
+        console.error("Error details:", dbError.detail || "No additional details");
+        console.error("Error query:", dbError.query || "No query available");
+        return res.status(500).json({ 
+          message: "Database error while creating compliance deadline", 
+          error: dbError.message,
+          detail: dbError.detail || null
         });
       }
-      
-      res.status(201).json(deadline);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error creating compliance deadline:", error);
+      console.error("Error stack:", error.stack);
       res.status(500).json({ message: "Error creating compliance deadline", error: error.message });
     }
   });
   
+  /**
+   * Sanitizes an object recursively to ensure all number fields are valid integers
+   * or nulls, preventing any NaN values from reaching the database
+   */
+  function deepSanitizeObject(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(obj)) {
+      // Handle different data types appropriately
+      if (value === null || value === undefined) {
+        // Allow nulls/undefined to pass through
+        result[key] = value;
+      } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        // Recursively sanitize nested objects
+        result[key] = deepSanitizeObject(value);
+      } else if (typeof value === 'string' && key.toLowerCase().includes('id') && key !== 'documentId') {
+        // If field name contains 'id' and is a string, try to parse as integer
+        if (value === '' || value === 'none' || value === 'null') {
+          result[key] = null;
+        } else {
+          const parsed = parseInt(value.replace(/[^0-9-]/g, ''), 10);
+          result[key] = isNaN(parsed) ? null : parsed;
+        }
+      } else if (typeof value === 'number' && isNaN(value) && key.toLowerCase().includes('id')) {
+        // If it's NaN but in an ID field, convert to null
+        result[key] = null;
+      } else {
+        // Pass all other values through unchanged
+        result[key] = value;
+      }
+    }
+    
+    return result;
+  }
+
   app.put("/api/compliance-deadlines/:id", requireRole(["admin", "compliance_officer"]), async (req: Request, res: Response) => {
     try {
-      const deadline = await storage.updateComplianceDeadline(parseInt(req.params.id), req.body);
+      console.log("Original request body:", JSON.stringify(req.body));
+      
+      // First completely sanitize the entire request to prevent any NaN values
+      let safeData = deepSanitizeObject(req.body);
+      console.log("After deep sanitization:", JSON.stringify(safeData));
+      
+      // Process and sanitize the request data - now with safer data
+      let requestData: Record<string, any> = {...safeData};
+      
+      // Handle date conversion
+      if (requestData.deadline) {
+        requestData.deadline = new Date(requestData.deadline);
+      }
+      
+      // Handle assigneeId with proper type handling - additional safety
+      if ('assigneeId' in requestData) {
+        // If null, empty string or "none", set to null
+        if (requestData.assigneeId === null || 
+            requestData.assigneeId === "" || 
+            requestData.assigneeId === "none" || 
+            requestData.assigneeId === "null") {
+          requestData.assigneeId = null;
+        } 
+        // If it's already a number, verify it's not NaN
+        else if (typeof requestData.assigneeId === 'number') {
+          requestData.assigneeId = isNaN(requestData.assigneeId) ? null : requestData.assigneeId;
+        } 
+        // If it's a string that can be parsed as a number
+        else if (typeof requestData.assigneeId === 'string') {
+          // Remove any non-numeric characters first
+          const cleanedValue = requestData.assigneeId.replace(/[^0-9]/g, '');
+          if (cleanedValue === '') {
+            requestData.assigneeId = null;
+          } else {
+            const parsedId = parseInt(cleanedValue, 10);
+            requestData.assigneeId = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // Anything else becomes null
+        else {
+          requestData.assigneeId = null;
+        }
+      }
+      
+      console.log("Sanitized request data for update:", JSON.stringify(requestData));
+      
+      // Convert to a clean object to avoid any potential prototype issues
+      const cleanedData: Record<string, any> = {};
+      
+      // Only add properties that exist and have valid values
+      for (const [key, value] of Object.entries(requestData)) {
+        // Special handling for ID fields to ensure they are valid integers or null
+        if (key.toLowerCase().includes('id') && key !== 'documentId') {
+          if (value === null) {
+            cleanedData[key] = null;
+          } else if (typeof value === 'number') {
+            cleanedData[key] = isNaN(value) ? null : value;
+          } else if (typeof value === 'string') {
+            const parsedId = parseInt(value.replace(/[^0-9]/g, ''), 10);
+            cleanedData[key] = isNaN(parsedId) ? null : parsedId;
+          }
+        } 
+        // For non-ID fields, just check if defined
+        else if (value !== undefined) {
+          cleanedData[key] = value;
+        }
+      }
+      
+      console.log("Final cleaned data:", JSON.stringify(cleanedData));
+      
+      try {
+        // Parse ID correctly and with a fallback
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+        
+        const deadline = await storage.updateComplianceDeadline(id, cleanedData);
+        
+        if (!deadline) {
+          return res.status(404).json({ message: "Compliance deadline not found" });
+        }
+        
+        // Create audit trail record if related to a document
+        if (deadline.documentId) {
+          await storage.createAuditRecord({
+            documentId: deadline.documentId,
+            userId: req.user!.id,
+            action: "COMPLIANCE_DEADLINE_UPDATED",
+            details: `Compliance deadline "${deadline.title}" updated`,
+            ipAddress: req.ip
+          });
+        }
+        
+        res.json(deadline);
+      } catch (dbError: any) {
+        console.error("Database error:", dbError);
+        console.error("Error details:", dbError.detail || "No additional details");
+        console.error("Error query:", dbError.query || "No query available");
+        return res.status(500).json({ 
+          message: "Database error while updating compliance deadline", 
+          error: dbError.message,
+          detail: dbError.detail || null
+        });
+      }
+    } catch (error: any) {
+      console.error("Error updating compliance deadline:", error);
+      console.error("Error stack:", error.stack);
+      res.status(500).json({ message: "Error updating compliance deadline", error: error.message });
+    }
+  });
+  
+  // Add this new route after the existing compliance deadlines API routes
+  app.get("/api/compliance-deadlines/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      // Parse and validate the ID
+      const rawId = req.params.id;
+      const id = parseInt(String(rawId).replace(/[^0-9]/g, ''), 10);
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid deadline ID format" });
+      }
+      
+      const deadline = await storage.getComplianceDeadline(id);
       
       if (!deadline) {
         return res.status(404).json({ message: "Compliance deadline not found" });
       }
       
-      // Create audit trail record if related to a document
-      if (deadline.documentId) {
-        await storage.createAuditRecord({
-          documentId: deadline.documentId,
-          userId: req.user.id,
-          action: "COMPLIANCE_DEADLINE_UPDATED",
-          details: `Compliance deadline "${deadline.title}" updated`,
-          ipAddress: req.ip
-        });
+      // Check if employee has access to this deadline
+      if (req.user.role === "employee" && deadline.assigneeId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
       }
       
       res.json(deadline);
-    } catch (error) {
-      res.status(500).json({ message: "Error updating compliance deadline", error: error.message });
+    } catch (error: any) {
+      console.error("Error retrieving compliance deadline:", error);
+      res.status(500).json({ message: "Error retrieving compliance deadline", error: error.message });
     }
   });
   
@@ -362,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const templates = await storage.listTemplates();
       res.json(templates);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving templates", error: error.message });
     }
   });
@@ -380,7 +644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(template);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving template", error: error.message });
     }
   });
@@ -389,7 +653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validation = insertTemplateSchema.safeParse({
         ...req.body,
-        createdById: req.user.id
+        createdById: req.user?.id
       });
       
       if (!validation.success) {
@@ -398,11 +662,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const template = await storage.createTemplate({
         ...req.body,
-        createdById: req.user.id
+        createdById: req.user?.id
       });
       
       res.status(201).json(template);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error creating template", error: error.message });
     }
   });
@@ -432,7 +696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       res.json({ content: generatedContent });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error generating document", error: error.message });
     }
   });
@@ -451,7 +715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const improvedContent = await aiService.improveDocumentContent(content);
       res.json({ content: improvedContent });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error improving document", error: error.message });
     }
   });
@@ -470,7 +734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const complianceCheck = await aiService.checkComplianceIssues(content);
       res.json(complianceCheck);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error checking compliance", error: error.message });
     }
   });
@@ -489,7 +753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const suggestions = await aiService.suggestComplianceActions(currentCompliance);
       res.json({ suggestions });
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error generating suggestions", error: error.message });
     }
   });
@@ -506,7 +770,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(usersResponse);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving users", error: error.message });
     }
   });
@@ -587,8 +851,195 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       res.json(stats);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({ message: "Error retrieving dashboard stats", error: error.message });
+    }
+  });
+
+  // AI Chat API
+  app.post("/api/ai/chat", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { messages, model = "gpt-4o-mini", temperature = 0.7, max_tokens = 500, context } = req.body;
+      
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ message: "Invalid request. Messages array is required." });
+      }
+      
+      // Format messages for OpenAI
+      const formattedMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add system message with context if provided
+      if (context) {
+        formattedMessages.unshift({
+          role: "system",
+          content: context
+        });
+      }
+      
+      const response = await openai.chat.completions.create({
+        model,
+        messages: formattedMessages,
+        temperature,
+        max_tokens,
+      });
+      
+      // Create an audit record for the AI interaction
+      await storage.createAuditRecord({
+        userId: req.user!.id,
+        action: "AI_CHAT_INTERACTION",
+        details: `User interaction with AI assistant`,
+        ipAddress: req.ip
+      });
+      
+      res.json({
+        choices: [
+          {
+            message: {
+              content: response.choices[0]?.message?.content || "I'm sorry, I couldn't process that request."
+            }
+          }
+        ]
+      });
+    } catch (error: any) {
+      console.error("Error in AI chat:", error);
+      res.status(500).json({ 
+        message: "Error processing AI request", 
+        error: error.message 
+      });
+    }
+  });
+
+  // Document Files API
+  app.post("/api/documents/:id/files", upload.single('file'), async (req: any, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    const objectName = `documents/${documentId}/${Date.now()}-${file.originalname}`;
+    try {
+      const uploadResult = await objectClient.uploadFromBytes(objectName, file.buffer);
+      if (!uploadResult.ok) {
+        return res.status(500).json({ message: "Error uploading file", error: uploadResult.error });
+      }
+      await storage.createAuditRecord({
+        documentId,
+        userId: req.user.id,
+        action: "FILE_UPLOADED",
+        details: `Uploaded file ${file.originalname}`,
+        ipAddress: req.ip
+      });
+      res.status(201).json({ name: file.originalname, key: objectName });
+    } catch (err: any) {
+      res.status(500).json({ message: "Error uploading file", error: err.message });
+    }
+  });
+
+  app.get("/api/documents/:id/files", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    try {
+      const listResult = await objectClient.list({ prefix: `documents/${documentId}/` });
+      if (!listResult.ok) {
+        return res.status(500).json({ message: "Error listing files", error: listResult.error });
+      }
+      const files = listResult.value.map(f => ({ name: f.name.split('/').slice(2).join('/'), key: f.name }));
+      res.json(files);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error listing files", error: err.message });
+    }
+  });
+
+  app.get("/api/documents/:id/files/:fileName", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    const fileName = req.params.fileName;
+    const objectKey = `documents/${documentId}/${fileName}`;
+    try {
+      const existsResult = await objectClient.exists(objectKey);
+      if (!existsResult.ok) {
+        return res.status(500).json({ message: "Error checking file", error: existsResult.error });
+      }
+      if (!existsResult.value) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      const stream = objectClient.downloadAsStream(objectKey);
+      const contentType = mime.lookup(fileName) as string || 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      stream.pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error downloading file", error: err.message });
+    }
+  });
+
+  app.delete("/api/documents/:id/files/:fileName", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const documentId = parseInt(req.params.id);
+    const fileName = req.params.fileName;
+    const objectKey = `documents/${documentId}/${fileName}`;
+    try {
+      const deleteResult = await objectClient.delete(objectKey);
+      if (!deleteResult.ok) {
+        return res.status(500).json({ message: "Error deleting file", error: deleteResult.error });
+      }
+      await storage.createAuditRecord({
+        documentId,
+        userId: req.user.id,
+        action: "FILE_DELETED",
+        details: `Deleted file ${fileName}`,
+        ipAddress: req.ip
+      });
+      res.sendStatus(204);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error deleting file", error: err.message });
+    }
+  });
+
+  // Add this endpoint after your existing document file endpoints
+  app.get("/api/documents/files", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const listResult = await objectClient.list({ prefix: 'documents/' });
+      if (!listResult.ok) {
+        return res.status(500).json({ message: "Error listing files", error: listResult.error });
+      }
+      
+      // Transform the results to include document IDs
+      const files = listResult.value.map(file => {
+        const parts = file.name.split('/');
+        if (parts.length >= 2) {
+          return {
+            name: parts.slice(2).join('/'),
+            key: file.name,
+            documentId: parseInt(parts[1], 10)
+          };
+        }
+        return null;
+      }).filter(Boolean);
+      
+      res.json(files);
+    } catch (err: any) {
+      res.status(500).json({ message: "Error listing all files", error: err.message });
     }
   });
 

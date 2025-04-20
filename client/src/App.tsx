@@ -14,6 +14,8 @@ import AuditPage from "@/pages/audit-page";
 import UsersPage from "@/pages/users-page";
 import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
+import ComplianceDeadlinePage from '@/pages/compliance-deadline-page';
+import DocumentDashboardPage from '@/pages/document-dashboard-page';
 
 function Router() {
   return (
@@ -26,7 +28,10 @@ function Router() {
       <ProtectedRoute path="/audit" component={AuditPage} />
       <ProtectedRoute path="/users" component={UsersPage} allowedRoles={["admin", "compliance_officer"]} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
+      <ProtectedRoute path="/compliance/deadlines/:id" component={ComplianceDeadlinePage} />
+      <ProtectedRoute path="/document-dashboard" component={DocumentDashboardPage} />
       <Route path="/auth" component={AuthPage} />
+      
       <Route component={NotFound} />
     </Switch>
   );
