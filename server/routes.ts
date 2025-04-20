@@ -16,6 +16,8 @@ import multer from 'multer';
 import { Client } from '@replit/object-storage';
 // @ts-ignore: mime-types has no types in tsconfig
 import mime from 'mime-types';
+import fs from 'fs';
+import path from 'path';
 
 // Initialize environment variables
 dotenv.config();
@@ -26,7 +28,48 @@ const openai = new OpenAI({
 });
 
 const upload = multer();
-const objectClient = new Client();
+
+// Check if we're running in development mode
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
+// Create a mock object client for local development
+class MockObjectClient {
+  private storage: Map<string, Buffer> = new Map();
+  
+  async uploadFromBytes(key: string, data: Buffer): Promise<any> {
+    this.storage.set(key, data);
+    return { ok: true };
+  }
+  
+  async exists(key: string): Promise<any> {
+    return { ok: true, value: this.storage.has(key) };
+  }
+  
+  async delete(key: string): Promise<any> {
+    this.storage.delete(key);
+    return { ok: true };
+  }
+  
+  async list(options: { prefix: string }): Promise<any> {
+    const results = Array.from(this.storage.keys())
+      .filter(key => key.startsWith(options.prefix))
+      .map(name => ({ name }));
+    return { ok: true, value: results };
+  }
+  
+  downloadAsStream(key: string): any {
+    // This is a simplified mock that returns a readable stream from a buffer
+    const Readable = require('stream').Readable;
+    const stream = new Readable();
+    const data = this.storage.get(key) || Buffer.from('');
+    stream.push(data);
+    stream.push(null); // Signal the end of the stream
+    return stream;
+  }
+}
+
+// Use a mock client in development to avoid connection issues
+const objectClient = isDevelopment ? new MockObjectClient() : new Client();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -1106,6 +1149,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.delete("/api/user-documents/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      
+      // Check if document exists and belongs to user
+      const document = await storage.getUserDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      if (document.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Delete from object storage if it exists
+      if (document.fileUrl) {
+        try {
+          const objectStorage = new ObjectStorageClient({
+            bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+          });
+          
+          // Delete the file from storage
+          await objectStorage.delete(document.fileUrl);
+        } catch (storageError) {
+          console.error("Error deleting file from storage:", storageError);
+          // Continue with deletion even if storage deletion fails
+        }
+      }
+      
+      // Delete the document
+      await storage.deleteUserDocument(documentId);
+      
+      res.status(200).json({ message: "Document deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting document", error: error.message });
+    }
+  });
 
   // Document Files API
   app.post("/api/documents/:id/files", upload.single('file'), async (req: any, res: Response) => {
@@ -1146,7 +1230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!listResult.ok) {
         return res.status(500).json({ message: "Error listing files", error: listResult.error });
       }
-      const files = listResult.value.map(f => ({ name: f.name.split('/').slice(2).join('/'), key: f.name }));
+      const files = listResult.value.map((f: any) => ({ name: f.name.split('/').slice(2).join('/'), key: f.name }));
       res.json(files);
     } catch (err: any) {
       res.status(500).json({ message: "Error listing files", error: err.message });
@@ -1205,53 +1289,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add this endpoint after your existing document file endpoints
   app.get("/api/documents/files", async (req: Request, res: Response) => {
-
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     
     try {
-      const documentId = parseInt(req.params.id);
-      
-      // Check if document exists and belongs to user
-      const document = await storage.getUserDocument(documentId);
-      
-      if (!document) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-      
-      if (document.userId !== req.user.id) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      
-      // Delete from object storage if it exists
-      if (document.fileUrl) {
-        try {
-          const objectStorage = new ObjectStorageClient({
-            bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
-          });
-          
-          // Delete the file from storage
-          await objectStorage.delete(document.fileUrl);
-        } catch (storageError) {
-          console.error("Error deleting file from storage:", storageError);
-          // Continue with deletion even if storage deletion fails
-        }
-      }
-      
-      // Delete the document
-      await storage.deleteUserDocument(documentId);
-      
-      res.status(200).json({ message: "Document deleted successfully" });
-    } catch (error: any) {
-      res.status(500).json({ message: "Error deleting document", error: error.message });
       const listResult = await objectClient.list({ prefix: 'documents/' });
       if (!listResult.ok) {
         return res.status(500).json({ message: "Error listing files", error: listResult.error });
       }
       
       // Transform the results to include document IDs
-      const files = listResult.value.map(file => {
+      const files = listResult.value.map((file: any) => {
         const parts = file.name.split('/');
         if (parts.length >= 2) {
           return {

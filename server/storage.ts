@@ -179,7 +179,7 @@ export class DatabaseStorage implements IStorage {
     // Insert document
     const [newDocument] = await db
       .insert(documents)
-      .values(document)
+      .values(document as any)
       .returning();
     
     // Create initial version
@@ -187,7 +187,7 @@ export class DatabaseStorage implements IStorage {
       documentId: newDocument.id,
       version: 1,
       content: document.content,
-      createdById: document.createdById
+      createdById: document.createdById || 0
     });
     
     return newDocument;

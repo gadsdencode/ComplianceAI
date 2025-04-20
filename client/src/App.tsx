@@ -15,6 +15,7 @@ import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
 import ComplianceDeadlinePage from '@/pages/compliance-deadline-page';
 import DocumentDashboardPage from '@/pages/document-dashboard-page';
+import DocumentRepositoryPage from "@/pages/document-repository-page";
 
 
 function Router() {
