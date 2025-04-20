@@ -5,11 +5,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build": "npm install && vite build",
+    "build": "npm install && vite build && tsc -p tsconfig.server.json",
     "drizzle:generate": "drizzle-kit generate:pg --schema=shared/schema.ts",
     "drizzle:push": "drizzle-kit push:pg --schema=shared/schema.ts",
     "migrate": "tsx server/run-migrations.ts",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "NODE_ENV=production node dist/server/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },
