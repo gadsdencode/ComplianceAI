@@ -51,23 +51,10 @@ export default function DocumentDashboardPage() {
   const { data: allFiles = [], isLoading: isLoadingFiles } = useQuery<FileItem[]>({
     queryKey: ['/api/documents/files'],
     queryFn: async () => {
-      // This is a mock implementation - you would need to create this endpoint
-      // or fetch files for each document individually
-      const allDocumentFiles: FileItem[] = [];
-      for (const doc of documents) {
-        try {
-          const res = await fetch(`/api/documents/${doc.id}/files`, { credentials: 'include' });
-          if (res.ok) {
-            const files = await res.json();
-            allDocumentFiles.push(...files.map((f: FileItem) => ({ ...f, documentId: doc.id })));
-          }
-        } catch (error) {
-          console.error(`Error fetching files for document ${doc.id}:`, error);
-        }
-      }
-      return allDocumentFiles;
+      const res = await fetch('/api/documents/files', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch all document files');
+      return res.json();
     },
-    enabled: documents.length > 0,
   });
 
   // Create new document mutation
