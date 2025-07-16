@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import DocumentViewer from '@/components/documents/DocumentViewer';
 import FileUploader from '@/components/documents/FileUploader';
 import DocumentMoreOptions from '@/components/documents/DocumentMoreOptions';
+import UserDocumentEditModal from '@/components/documents/UserDocumentEditModal';
 
 interface FileNode {
   id: string;
@@ -301,6 +302,7 @@ const ComplianceWorkspace: React.FC = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [viewingDocument, setViewingDocument] = useState<UserDocument | null>(null);
+  const [editingDocument, setEditingDocument] = useState<UserDocument | null>(null);
   const [isUploadMode, setIsUploadMode] = useState(false);
   const [starredComplianceDocs, setStarredComplianceDocs] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
@@ -389,6 +391,28 @@ const ComplianceWorkspace: React.FC = () => {
       toast({
         title: "Error",
         description: "Failed to delete document",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Edit document mutation
+  const editDocumentMutation = useMutation({
+    mutationFn: async ({ documentId, updates }: { documentId: number; updates: Partial<UserDocument> }) => {
+      return apiRequest('PATCH', `/api/user-documents/${documentId}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      toast({
+        title: "Success",
+        description: "Document updated successfully",
+      });
+      setEditingDocument(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update document",
         variant: "destructive",
       });
     }
@@ -577,15 +601,16 @@ const ComplianceWorkspace: React.FC = () => {
     if (!node.document) return;
     
     if ('userId' in node.document) {
-      // User document - for now, just show a toast that edit is not implemented
-      toast({
-        title: "Edit User Document",
-        description: "User document editing is not yet implemented.",
-      });
+      // User document - open edit modal
+      setEditingDocument(node.document);
     } else {
       // Compliance document - navigate to edit mode
       setLocation(`/documents/${node.document.id}?action=edit`);
     }
+  };
+
+  const handleSaveDocumentEdit = (documentId: number, updates: Partial<UserDocument>) => {
+    editDocumentMutation.mutate({ documentId, updates });
   };
 
   const handleShareDocument = (node: FileNode) => {
@@ -866,6 +891,17 @@ const ComplianceWorkspace: React.FC = () => {
             document={viewingDocument}
             isOpen={!!viewingDocument}
             onClose={() => setViewingDocument(null)}
+          />
+        )}
+
+        {/* Document Edit Modal */}
+        {editingDocument && (
+          <UserDocumentEditModal
+            document={editingDocument}
+            isOpen={!!editingDocument}
+            onClose={() => setEditingDocument(null)}
+            onSave={handleSaveDocumentEdit}
+            isSaving={editDocumentMutation.isPending}
           />
         )}
       </div>
