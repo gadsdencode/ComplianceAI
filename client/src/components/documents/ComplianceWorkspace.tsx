@@ -898,10 +898,11 @@ const ComplianceWorkspace: React.FC = () => {
     if (!node.document) return;
     
     if ('userId' in node.document) {
-      // User document - use existing file URL
+      // User document - use API endpoint with proper authentication
       const link = document.createElement('a');
-      link.href = node.document.fileUrl;
-      link.download = node.document.fileName;
+      link.href = node.document.fileUrl; // This is the API endpoint: /api/user-documents/:id/download
+      link.setAttribute('download', node.document.fileName);
+      link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

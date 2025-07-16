@@ -14,10 +14,11 @@ export default function DocumentViewer({ document, isOpen, onClose }: DocumentVi
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDownload = () => {
-    // Create a direct link to download the file
+    // Create a direct link to download the file with proper authentication
     const link = window.document.createElement('a');
-    link.href = document.fileUrl;
-    link.download = document.fileName;
+    link.href = document.fileUrl; // This is the API endpoint: /api/user-documents/:id/download
+    link.setAttribute('download', document.fileName);
+    link.style.display = 'none';
     window.document.body.appendChild(link);
     link.click();
     window.document.body.removeChild(link);

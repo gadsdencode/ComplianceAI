@@ -31,47 +31,8 @@ const openai = new OpenAI({
 
 const upload = multer();
 
-// Check if we're running in development mode
-const isDevelopment = process.env.NODE_ENV !== 'production';
-
-// Create a mock object client for local development
-class MockObjectClient {
-  private storage: Map<string, Buffer> = new Map();
-  
-  async uploadFromBytes(key: string, data: Buffer): Promise<any> {
-    this.storage.set(key, data);
-    return { ok: true };
-  }
-  
-  async exists(key: string): Promise<any> {
-    return { ok: true, value: this.storage.has(key) };
-  }
-  
-  async delete(key: string): Promise<any> {
-    this.storage.delete(key);
-    return { ok: true };
-  }
-  
-  async list(options: { prefix: string }): Promise<any> {
-    const results = Array.from(this.storage.keys())
-      .filter(key => key.startsWith(options.prefix))
-      .map(name => ({ name }));
-    return { ok: true, value: results };
-  }
-  
-  downloadAsStream(key: string): any {
-    // This is a simplified mock that returns a readable stream from a buffer
-    const Readable = require('stream').Readable;
-    const stream = new Readable();
-    const data = this.storage.get(key) || Buffer.from('');
-    stream.push(data);
-    stream.push(null); // Signal the end of the stream
-    return stream;
-  }
-}
-
-// Use a mock client in development to avoid connection issues
-const objectClient = isDevelopment ? new MockObjectClient() : new Client();
+// Use the real ObjectStorageClient for all environments
+const objectClient = new Client();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -1286,17 +1247,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      // Initialize the appropriate Object Storage client
-      let storageClient;
-      if (isDevelopment) {
-        // Use the existing mock client for development
-        storageClient = objectClient;
-      } else {
-        // Use the real ObjectStorageClient for production
-        storageClient = new ObjectStorageClient({
-          bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
-        });
-      }
+      // Use the real ObjectStorageClient with the production bucket for all environments
+      const storageClient = new ObjectStorageClient({
+        bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+      });
       
       // Check if file exists in storage
       const existsResult = await storageClient.exists(document.fileUrl);
@@ -1400,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const objectName = `${req.user.id}/${timestamp}-${sanitizedFileName}`;
       
       try {
-        // Initialize Object Storage client with the specified bucket ID
+        // Use the same ObjectStorageClient for consistency
         console.log("Initializing Object Storage client with bucket ID: replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826");
         const objectStorage = new ObjectStorageClient({
           bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
