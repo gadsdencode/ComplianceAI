@@ -79,12 +79,7 @@ export class DatabaseStorage implements IStorage {
   constructor() {
     this.sessionStore = new PostgresSessionStore({ 
       pool, 
-      createTableIfMissing: true,
-      errorLog: (err) => {
-        console.warn('Session store connection error (will retry):', err.message);
-      },
-      ttl: 24 * 60 * 60, // 24 hours
-      pruneSessionInterval: false // Disable session pruning to avoid connection issues
+      createTableIfMissing: true 
     });
     
     // Initialize default templates

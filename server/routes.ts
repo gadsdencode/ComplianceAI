@@ -78,7 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
   
   // Health check endpoint for deployment
-  app.get("/", (req: Request, res: Response) => {
+  app.get("/api/health", (req: Request, res: Response) => {
     res.status(200).json({ 
       status: "healthy", 
       timestamp: new Date().toISOString(),
