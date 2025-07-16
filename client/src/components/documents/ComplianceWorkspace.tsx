@@ -872,6 +872,36 @@ const ComplianceWorkspace: React.FC = () => {
     await uploadToFolderMutation.mutateAsync({ folderId, files });
   };
 
+  const handleMoveDocument = async (documentId: number, targetFolderId: string, currentCategory: string) => {
+    try {
+      // Extract folder name from ID format: folder-{userId}-{folderName}
+      const targetFolder = folders?.find(f => f.id === targetFolderId);
+      if (!targetFolder) {
+        throw new Error('Target folder not found');
+      }
+      
+      const targetFolderName = targetFolder.name;
+      
+      // Don't move if it's already in the target folder
+      if (currentCategory === targetFolderName) {
+        return;
+      }
+      
+      // Update the document's category using the existing PATCH endpoint
+      await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
+        category: targetFolderName 
+      });
+      
+      // Refresh the queries to update the UI
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      
+    } catch (error) {
+      console.error('Error moving document:', error);
+      throw error;
+    }
+  };
+
   const handleEditDocument = (node: FileNode) => {
     if (!node.document) return;
     
@@ -1160,6 +1190,7 @@ const ComplianceWorkspace: React.FC = () => {
                 onRenameFolder={handleRenameFolder}
                 onDeleteFolder={handleDeleteFolder}
                 onUploadToFolder={handleUploadToFolder}
+                onMoveDocument={handleMoveDocument}
                 isCreating={createFolderMutation.isPending}
               />
             </motion.div>

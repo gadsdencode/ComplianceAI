@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { UserDocument } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
-import { FileText, Eye, Download, Trash2, AlertTriangle, Search } from 'lucide-react';
+import { FileText, Eye, Download, Trash2, AlertTriangle, Search, GripVertical } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -17,6 +17,7 @@ interface UserDocumentListProps {
   error?: string;
   onDelete: (document: UserDocument) => Promise<void>;
   onView: (document: UserDocument) => void;
+  onMoveDocument?: (documentId: number, newCategory: string) => Promise<void>;
 }
 
 export default function UserDocumentList({ 
@@ -24,11 +25,13 @@ export default function UserDocumentList({
   isLoading, 
   error, 
   onDelete,
-  onView 
+  onView,
+  onMoveDocument 
 }: UserDocumentListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [documentToDelete, setDocumentToDelete] = useState<UserDocument | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [draggedDocument, setDraggedDocument] = useState<UserDocument | null>(null);
   const { toast } = useToast();
 
   // Filter documents by search query (title, description, and tags)
@@ -84,6 +87,35 @@ export default function UserDocumentList({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDragStart = (e: React.DragEvent, document: UserDocument) => {
+    setDraggedDocument(document);
+    
+    const dragData = {
+      type: 'document',
+      documentId: document.id,
+      documentType: 'user',
+      currentCategory: document.category || 'General',
+      title: document.title
+    };
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = 'move';
+    
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setDraggedDocument(null);
+    
+    // Restore visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
   };
 
   if (isLoading) {
@@ -156,14 +188,22 @@ export default function UserDocumentList({
           {filteredDocuments.map((document) => (
             <Card 
               key={document.id} 
-              className="overflow-hidden hover:shadow-md transition-shadow"
+              className={`overflow-hidden hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
+                draggedDocument?.id === document.id ? 'opacity-50' : ''
+              }`}
+              draggable
+              onDragStart={(e) => handleDragStart(e, document)}
+              onDragEnd={handleDragEnd}
             >
               <CardContent className="p-0">
                 <div className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-md bg-primary-50 text-primary-600 flex items-center justify-center mr-4">
-                        <FileText size={20} />
+                      <div className="flex items-center mr-3">
+                        <GripVertical className="h-4 w-4 text-slate-400 mr-2 cursor-grab" />
+                        <div className="h-10 w-10 rounded-md bg-primary-50 text-primary-600 flex items-center justify-center">
+                          <FileText size={20} />
+                        </div>
                       </div>
                       <div>
                         <h3 className="font-medium">{document.title}</h3>
@@ -190,6 +230,13 @@ export default function UserDocumentList({
                             </div>
                           )}
                         </div>
+                        {document.category && (
+                          <div className="mt-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {document.category}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     </div>
                     

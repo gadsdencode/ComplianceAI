@@ -33,6 +33,7 @@ interface FolderManagerProps {
   onRenameFolder: (id: string, newName: string) => Promise<void>;
   onDeleteFolder: (id: string) => Promise<void>;
   onUploadToFolder: (folderId: string, files: FileList) => Promise<void>;
+  onMoveDocument?: (documentId: number, targetFolderId: string, currentCategory: string) => Promise<void>;
   isCreating?: boolean;
   className?: string;
 }
@@ -151,6 +152,7 @@ interface FolderCardProps {
   onRename: (id: string, newName: string) => void;
   onDelete: (id: string) => void;
   onUpload: (folderId: string, files: FileList) => void;
+  onMoveDocument?: (documentId: number, targetFolderId: string, currentCategory: string) => Promise<void>;
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent, folderId: string) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -162,6 +164,7 @@ const FolderCard: React.FC<FolderCardProps> = ({
   onRename,
   onDelete,
   onUpload,
+  onMoveDocument,
   isDragOver,
   onDragOver,
   onDragLeave,
@@ -343,6 +346,7 @@ export default function FolderManager({
   onRenameFolder,
   onDeleteFolder,
   onUploadToFolder,
+  onMoveDocument,
   isCreating = false,
   className = ''
 }: FolderManagerProps) {
@@ -431,24 +435,58 @@ export default function FolderManager({
     e.stopPropagation();
     setDragOverFolder(null);
 
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      try {
+    try {
+      // Check if it's a document being moved
+      const dragDataString = e.dataTransfer.getData('application/json');
+      if (dragDataString) {
+        const dragData = JSON.parse(dragDataString);
+        
+        if (dragData.type === 'document' && onMoveDocument) {
+          // Handle document move
+          const targetFolder = folders.find(f => f.id === folderId);
+          if (!targetFolder) return;
+          
+          // Extract folder name from ID format: folder-{userId}-{folderName}
+          const targetFolderName = targetFolder.name;
+          
+          // Don't move if it's already in the target folder
+          if (dragData.currentCategory === targetFolderName) {
+            toast({
+              title: "No Move Needed",
+              description: `Document is already in the "${targetFolderName}" folder.`,
+            });
+            return;
+          }
+          
+          await onMoveDocument(dragData.documentId, folderId, dragData.currentCategory);
+          
+          toast({
+            title: "Document Moved",
+            description: `"${dragData.title}" moved to "${targetFolderName}" successfully.`,
+          });
+          return;
+        }
+      }
+      
+      // Handle file uploads from file system (existing functionality)
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
         await onUploadToFolder(folderId, files);
         const folder = folders.find(f => f.id === folderId);
         toast({
           title: "Files Uploaded",
           description: `${files.length} file(s) uploaded to "${folder?.name}" successfully.`,
         });
-      } catch (error) {
-        toast({
-          title: "Upload Failed",
-          description: "Failed to upload files. Please try again.",
-          variant: "destructive",
-        });
       }
+    } catch (error) {
+      console.error('Drop error:', error);
+      toast({
+        title: "Operation Failed",
+        description: "Failed to complete the operation. Please try again.",
+        variant: "destructive",
+      });
     }
-  }, [folders, onUploadToFolder, toast]);
+  }, [folders, onUploadToFolder, onMoveDocument, toast]);
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -457,7 +495,7 @@ export default function FolderManager({
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Folders</h2>
           <p className="text-sm text-gray-500">
-            Organize your documents by creating folders and dragging files to them
+            Organize your documents by creating folders and dragging files or documents to them
           </p>
         </div>
         
@@ -481,6 +519,7 @@ export default function FolderManager({
               onRename={handleRenameFolder}
               onDelete={handleDeleteFolder}
               onUpload={onUploadToFolder}
+              onMoveDocument={onMoveDocument}
               isDragOver={dragOverFolder === folder.id}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -517,4 +556,4 @@ export default function FolderManager({
       />
     </div>
   );
-} 
+}
