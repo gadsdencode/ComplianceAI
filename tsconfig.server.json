@@ -4,7 +4,7 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "node",
-    "outDir": "dist/server",
+    "outDir": "dist",
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "esModuleInterop": true,
