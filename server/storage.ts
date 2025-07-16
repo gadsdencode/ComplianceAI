@@ -7,9 +7,9 @@ import type {
 } from "@shared/schema";
 import session from "express-session";
 import { eq, gt, desc, asc, and, sql } from "drizzle-orm";
-import { db } from "./db";
+import { db } from "./db.js";
 import connectPg from "connect-pg-simple";
-import { pool } from "./db";
+import { pool } from "./db.js";
 
 const PostgresSessionStore = connectPg(session);
 

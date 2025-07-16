@@ -1,4 +1,4 @@
-import { runMigration as addUserDocumentsTable } from "./migrations/add-user-documents-table";
+import { runMigration as addUserDocumentsTable } from "./migrations/add-user-documents-table.js";
 
 async function runAllMigrations() {
   console.log("Starting database migrations...");

@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { db } from "../db.js";
 
 export async function runMigration() {
   console.log("Running migration: Creating user_documents table");

@@ -1,14 +1,14 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { setupAuth, requireRole } from "./auth";
-import { db } from "./db";
+import { storage } from "./storage.js";
+import { setupAuth, requireRole } from "./auth.js";
+import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 import { 
   insertDocumentSchema, insertSignatureSchema, 
   insertComplianceDeadlineSchema, insertTemplateSchema 
 } from "@shared/schema";
-import { aiService } from "./ai-service";
+import { aiService } from "./ai-service.js";
 import OpenAI from "openai";
 import { Client as ObjectStorageClient } from "@replit/object-storage";
 import dotenv from "dotenv";
