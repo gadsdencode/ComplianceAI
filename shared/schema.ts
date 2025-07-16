@@ -98,6 +98,7 @@ export const userDocuments = pgTable("user_documents", {
   category: varchar("category", { length: 100 }).default("General"),
   starred: boolean("starred").default(false),
   status: text("status", { enum: ["draft", "review", "approved", "archived"] }).default("draft"),
+  isFolderPlaceholder: boolean("is_folder_placeholder").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

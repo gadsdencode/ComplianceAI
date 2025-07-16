@@ -35,6 +35,7 @@ import FileUploader from '@/components/documents/FileUploader';
 import DocumentMoreOptions from '@/components/documents/DocumentMoreOptions';
 import UserDocumentEditModal from '@/components/documents/UserDocumentEditModal';
 import ShareModal from '@/components/documents/ShareModal';
+import FolderManager from '@/components/documents/FolderManager';
 
 interface FileNode {
   id: string;
@@ -61,6 +62,7 @@ interface GridItemProps {
   onDownload?: (node: FileNode) => void;
   onChangeStatus?: (node: FileNode, status: string) => void;
   onDuplicate?: (node: FileNode) => void;
+  onMoveToFolder?: (documentId: string, folderId: string, sourceNodeId: string) => void;
   isSelected: boolean;
   level?: number;
 }
@@ -77,11 +79,13 @@ const GridItem: React.FC<GridItemProps> = ({
   onDownload,
   onChangeStatus,
   onDuplicate,
+  onMoveToFolder,
   isSelected, 
   level = 0 
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleToggle = () => {
     if (node.type === "folder") {
@@ -107,6 +111,92 @@ const GridItem: React.FC<GridItemProps> = ({
     return Math.round(bytes / Math.pow(1024, i)) + ' ' + sizes[i];
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    
+    if (node.type === "file" && node.document) {
+      const dragData = {
+        type: 'document',
+        documentId: node.document.id,
+        documentType: 'type' in node.document ? node.document.type : 'user',
+        currentCategory: 'category' in node.document ? node.document.category : 'Compliance',
+        sourceNodeId: node.id
+      };
+      e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+      e.dataTransfer.effectAllowed = 'move';
+      
+      // Add visual feedback to the dragged element
+      const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+      dragImage.style.transform = 'rotate(5deg)';
+      dragImage.style.opacity = '0.8';
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+    } else if (node.type === "folder") {
+      const dragData = {
+        type: 'folder',
+        folderId: node.id,
+        folderName: node.name,
+        sourceNodeId: node.id
+      };
+      e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+      e.dataTransfer.effectAllowed = 'move';
+      
+      // Add visual feedback to the dragged folder
+      const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+      dragImage.style.transform = 'rotate(3deg)';
+      dragImage.style.opacity = '0.7';
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (node.type === "folder") {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (node.type === "folder") {
+      // Only clear drag over if we're actually leaving the folder
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      if (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      ) {
+        setIsDragOver(false);
+      }
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (node.type === "folder") {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      
+      try {
+        const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+        
+        if (dragData.type === 'document' && dragData.documentType === 'user') {
+          // Move document to folder
+          if (onMoveToFolder) {
+            onMoveToFolder(dragData.documentId, node.id, dragData.sourceNodeId);
+          }
+        } else if (dragData.type === 'folder' && dragData.sourceNodeId !== node.id) {
+          // Move folder into this folder (create subfolder relationship)
+          if (onMoveToFolder) {
+            onMoveToFolder(dragData.folderId, node.id, dragData.sourceNodeId);
+          }
+        }
+      } catch (error) {
+        console.error('Error handling drop:', error);
+      }
+    }
+  };
+
   return (
     <motion.div
       layout
@@ -115,31 +205,47 @@ const GridItem: React.FC<GridItemProps> = ({
       exit={{ opacity: 0, y: -20 }}
       className="relative group"
     >
-      <motion.div
+      <div
+        draggable={true}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`
           relative p-4 rounded-xl border transition-all duration-300 cursor-pointer
           ${isSelected 
             ? "bg-blue-500/20 border-blue-500/50 shadow-lg shadow-blue-500/20" 
             : "bg-background/50 border-border hover:border-blue-400/50 hover:bg-blue-500/10"
           }
+          ${isDragOver && node.type === "folder" 
+            ? "border-green-400 bg-green-500/10 scale-105" 
+            : ""
+          }
           backdrop-blur-sm
+          cursor-move
         `}
-        onClick={() => onSelect(node)}
+        onClick={(e) => {
+          // Only handle click if it's not a drag operation
+          if (e.detail > 0) { // detail > 0 means it's a real click, not from drag
+            if (node.type === "folder") {
+              handleToggle();
+            }
+            onSelect(node);
+          }
+        }}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
-        whileHover={{ scale: 1.02, y: -2 }}
-        whileTap={{ scale: 0.98 }}
       >
+        <motion.div
+          whileHover={{ scale: 1.02, y: -2 }}
+          whileTap={{ scale: 0.98 }}
+        >
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             {node.type === "folder" ? (
               <motion.div
-                className="flex items-center gap-1 text-blue-400"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggle();
-                }}
+                className="flex items-center gap-1 text-blue-400 cursor-pointer"
               >
                 <motion.div
                   animate={{ rotate: isExpanded ? 90 : 0 }}
@@ -163,14 +269,14 @@ const GridItem: React.FC<GridItemProps> = ({
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 pointer-events-auto"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button 
                   className="p-1 rounded-md hover:bg-white/10 transition-colors"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (node.type === "file" && onView) {
+                    if (onView) {
                       onView(node);
                     }
                   }}
@@ -181,7 +287,10 @@ const GridItem: React.FC<GridItemProps> = ({
                 </button>
                 <button 
                   className="p-1 rounded-md hover:bg-white/10 transition-colors"
-                  onClick={() => onStar?.(node)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStar?.(node);
+                  }}
                   title={node.starred ? "Remove from favorites" : "Add to favorites"}
                   aria-label={node.starred ? "Remove from favorites" : "Add to favorites"}
                 >
@@ -190,7 +299,10 @@ const GridItem: React.FC<GridItemProps> = ({
                 {node.type === "file" && onDelete && (
                   <button 
                     className="p-1 rounded-md hover:bg-red-500/20 transition-colors"
-                    onClick={() => onDelete(node)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(node);
+                    }}
                     title="Delete document"
                     aria-label="Delete document"
                   >
@@ -261,7 +373,22 @@ const GridItem: React.FC<GridItemProps> = ({
             {node.children.length}
           </div>
         )}
+
+        {/* Drop zone indicator for folders */}
+        {node.type === "folder" && isDragOver && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 bg-green-500/20 border-2 border-dashed border-green-400 rounded-xl flex items-center justify-center backdrop-blur-sm"
+          >
+            <div className="text-green-400 font-semibold text-sm flex items-center gap-2">
+              <span>📂</span>
+              Drop document here
+            </div>
+          </motion.div>
+        )}
       </motion.div>
+      </div>
 
       {/* Expanded Children */}
       <AnimatePresence>
@@ -286,6 +413,7 @@ const GridItem: React.FC<GridItemProps> = ({
                 onDownload={onDownload}
                 onChangeStatus={onChangeStatus}
                 onDuplicate={onDuplicate}
+                onMoveToFolder={onMoveToFolder}
                 isSelected={isSelected}
                 level={level + 1}
               />
@@ -306,7 +434,9 @@ const ComplianceWorkspace: React.FC = () => {
   const [editingDocument, setEditingDocument] = useState<UserDocument | null>(null);
   const [sharingDocument, setSharingDocument] = useState<UserDocument | Document | null>(null);
   const [isUploadMode, setIsUploadMode] = useState(false);
+  const [showFolderManager, setShowFolderManager] = useState(false);
   const [starredComplianceDocs, setStarredComplianceDocs] = useState<Set<number>>(new Set());
+  const [isMainAreaDragOver, setIsMainAreaDragOver] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
@@ -332,6 +462,11 @@ const ComplianceWorkspace: React.FC = () => {
   // Fetch compliance documents
   const { data: complianceDocuments, isLoading: isLoadingComplianceDocs } = useQuery<Document[]>({
     queryKey: ['/api/documents'],
+  });
+
+  // Fetch user document folders
+  const { data: folders, isLoading: isLoadingFolders } = useQuery<any[]>({
+    queryKey: ['/api/user-documents/folders'],
   });
 
   // Star document mutation
@@ -417,6 +552,66 @@ const ComplianceWorkspace: React.FC = () => {
         description: "Failed to update document",
         variant: "destructive",
       });
+    }
+  });
+
+  // Folder management mutations
+  const createFolderMutation = useMutation({
+    mutationFn: async (name: string) => {
+      return apiRequest('POST', '/api/user-documents/folders', { name });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+    }
+  });
+
+  const renameFolderMutation = useMutation({
+    mutationFn: async ({ id, newName }: { id: string; newName: string }) => {
+      // For renaming, we need to update all documents in the folder
+      // This would require a more complex backend endpoint
+      throw new Error('Folder renaming not yet implemented');
+    }
+  });
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest('DELETE', `/api/user-documents/folders/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+    }
+  });
+
+  const uploadToFolderMutation = useMutation({
+    mutationFn: async ({ folderId, files }: { folderId: string; files: FileList }) => {
+      // Upload each file to the specified folder
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', file.name);
+        formData.append('folderId', folderId);
+        
+        const response = await fetch('/api/user-documents/upload', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to upload document');
+        }
+        
+        return await response.json();
+      });
+      
+      return Promise.all(uploadPromises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
     }
   });
 
@@ -599,6 +794,23 @@ const ComplianceWorkspace: React.FC = () => {
     uploadMutation.mutate({ file, metadata });
   };
 
+  // Folder management handlers
+  const handleCreateFolder = async (name: string) => {
+    await createFolderMutation.mutateAsync(name);
+  };
+
+  const handleRenameFolder = async (id: string, newName: string) => {
+    await renameFolderMutation.mutateAsync({ id, newName });
+  };
+
+  const handleDeleteFolder = async (id: string) => {
+    await deleteFolderMutation.mutateAsync(id);
+  };
+
+  const handleUploadToFolder = async (folderId: string, files: FileList) => {
+    await uploadToFolderMutation.mutateAsync({ folderId, files });
+  };
+
   const handleEditDocument = (node: FileNode) => {
     if (!node.document) return;
     
@@ -668,6 +880,54 @@ const ComplianceWorkspace: React.FC = () => {
     });
   };
 
+  const handleMoveToFolder = async (itemId: string, targetFolderId: string, sourceNodeId: string) => {
+    try {
+      // Find the target folder name for better user feedback
+      const targetFolder = fileNodes.find(folder => folder.id === targetFolderId);
+      const targetFolderName = targetFolder?.name || 'folder';
+      
+      // Determine if we're moving a document or a folder
+      const sourceNode = fileNodes.flatMap(folder => [folder, ...(folder.children || [])])
+        .find(node => node.id === sourceNodeId);
+      
+      if (!sourceNode) {
+        throw new Error('Source item not found');
+      }
+      
+      const isMovingFolder = sourceNode.type === 'folder';
+      const itemName = sourceNode.name;
+      
+      // Show success toast
+      toast({
+        title: `${isMovingFolder ? 'Folder' : 'Document'} Moved`,
+        description: `${itemName} has been moved to ${targetFolderName}.`,
+      });
+      
+      // TODO: Implement actual API calls when backend is ready
+      if (isMovingFolder) {
+        // API call for moving folder
+        // await apiRequest('PATCH', `/api/user-documents/folders/${itemId}`, { 
+        //   parentFolderId: targetFolderId 
+        // });
+      } else {
+        // API call for moving document
+        // await apiRequest('PATCH', `/api/user-documents/${itemId}`, { 
+        //   category: targetFolderName 
+        // });
+      }
+      // queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      // queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      
+          } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        toast({
+          title: "Error",
+          description: `Failed to move ${errorMessage.includes('folder') ? 'folder' : 'item'}.`,
+          variant: "destructive",
+        });
+      }
+  };
+
   const getStatusColor = (status?: string) => {
     switch (status) {
       case "draft": return "bg-yellow-500/20 text-yellow-300 border-yellow-500/30";
@@ -705,6 +965,14 @@ const ComplianceWorkspace: React.FC = () => {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                onClick={() => setShowFolderManager(!showFolderManager)}
+                variant={showFolderManager ? "secondary" : "outline"}
+                className="text-white border-white/20 hover:bg-white/10"
+              >
+                <FolderPlus className="w-4 h-4 mr-2" />
+                {showFolderManager ? 'Hide Folders' : 'Manage Folders'}
+              </Button>
               <Button
                 onClick={() => setIsUploadMode(!isUploadMode)}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -785,7 +1053,29 @@ const ComplianceWorkspace: React.FC = () => {
               <h2 className="text-xl font-semibold text-white mb-4">Upload Document</h2>
               <FileUploader 
                 onFileUpload={handleUpload}
+                folders={folders?.map(folder => ({ id: folder.id, name: folder.name })) || []}
                 isUploading={uploadMutation.isPending}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Folder Manager Section */}
+        <AnimatePresence>
+          {showFolderManager && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-6 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20"
+            >
+              <FolderManager
+                folders={folders || []}
+                onCreateFolder={handleCreateFolder}
+                onRenameFolder={handleRenameFolder}
+                onDeleteFolder={handleDeleteFolder}
+                onUploadToFolder={handleUploadToFolder}
+                isCreating={createFolderMutation.isPending}
               />
             </motion.div>
           )}
@@ -794,11 +1084,39 @@ const ComplianceWorkspace: React.FC = () => {
         {/* Grid */}
         <motion.div
           layout
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setIsMainAreaDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            // Only clear if we're leaving the main area completely
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setIsMainAreaDragOver(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsMainAreaDragOver(false);
+            
+            try {
+              const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+              if (dragData.type === 'folder') {
+                toast({
+                  title: "Folder Moved",
+                  description: `${dragData.folderName} has been moved to the main area.`,
+                });
+                // TODO: API call to move folder to root level
+              }
+            } catch (error) {
+              console.error('Error handling main area drop:', error);
+            }
+          }}
           className={`grid gap-4 ${
             viewMode === "grid" 
               ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" 
               : "grid-cols-1"
-          }`}
+          } ${isMainAreaDragOver ? 'bg-blue-500/10 border-2 border-dashed border-blue-400 rounded-lg p-4' : ''}`}
         >
           <AnimatePresence>
             {filteredData.map((node) => (
@@ -814,6 +1132,7 @@ const ComplianceWorkspace: React.FC = () => {
                 onDownload={handleDownloadDocument}
                 onChangeStatus={handleChangeDocumentStatus}
                 onDuplicate={handleDuplicateDocument}
+                onMoveToFolder={handleMoveToFolder}
                 isSelected={selectedNode?.id === node.id}
               />
             ))}

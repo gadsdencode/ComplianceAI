@@ -2,22 +2,31 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UploadCloud, X, AlertCircle, File, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { UploadCloud, X, AlertCircle, File, Loader2, Folder } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
+interface FolderOption {
+  id: string;
+  name: string;
+}
+
 interface FileUploaderProps {
-  onFileUpload: (file: File, metadata: { title: string; description?: string; tags?: string[] }) => Promise<void>;
+  onFileUpload: (file: File, metadata: { title: string; description?: string; tags?: string[]; folderId?: string }) => Promise<void>;
+  folders?: FolderOption[];
+  defaultFolderId?: string;
   isUploading?: boolean;
 }
 
-export default function FileUploader({ onFileUpload, isUploading = false }: FileUploaderProps) {
+export default function FileUploader({ onFileUpload, folders = [], defaultFolderId, isUploading = false }: FileUploaderProps) {
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(defaultFolderId || (folders.length > 0 ? folders[0].id : ''));
   
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -142,7 +151,8 @@ export default function FileUploader({ onFileUpload, isUploading = false }: File
       const metadata = {
         title: title.trim(),
         description: description.trim() || undefined,
-        tags: tagArray.length > 0 ? tagArray : undefined
+        tags: tagArray.length > 0 ? tagArray : undefined,
+        folderId: selectedFolderId || undefined
       };
       
       console.log('Upload metadata:', metadata);
@@ -155,6 +165,7 @@ export default function FileUploader({ onFileUpload, isUploading = false }: File
       setTitle('');
       setDescription('');
       setTags('');
+      setSelectedFolderId(defaultFolderId || (folders.length > 0 ? folders[0].id : ''));
       if (inputRef.current) inputRef.current.value = '';
       
     } catch (error) {
@@ -273,6 +284,27 @@ export default function FileUploader({ onFileUpload, isUploading = false }: File
               placeholder="Enter a brief description"
             />
           </div>
+          
+          {folders.length > 0 && (
+            <div>
+              <Label htmlFor="document-folder" className="block text-sm font-medium text-slate-700 mb-1">
+                <Folder className="w-4 h-4 inline mr-1" />
+                Folder
+              </Label>
+              <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a folder" />
+                </SelectTrigger>
+                <SelectContent>
+                  {folders.map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <div>
             <Label htmlFor="document-tags" className="block text-sm font-medium text-slate-700 mb-1">

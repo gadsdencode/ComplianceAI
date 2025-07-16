@@ -465,7 +465,12 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(userDocuments)
-      .where(eq(userDocuments.userId, userId))
+      .where(
+        and(
+          eq(userDocuments.userId, userId),
+          eq(userDocuments.isFolderPlaceholder, false)
+        )
+      )
       .orderBy(desc(userDocuments.updatedAt));
   }
   

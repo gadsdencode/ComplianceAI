@@ -2,6 +2,8 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, requireRole } from "./auth";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { 
   insertDocumentSchema, insertSignatureSchema, 
   insertComplianceDeadlineSchema, insertTemplateSchema 
@@ -1096,6 +1098,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  // User Document Folders API
+  app.get("/api/user-documents/folders", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      // Get all unique categories for the user and count real documents (exclude placeholders)
+      const result = await db.execute(sql`
+        SELECT 
+          COALESCE(category, 'General') as name,
+          COUNT(CASE WHEN COALESCE(is_folder_placeholder, false) = false THEN 1 END) as document_count,
+          MIN(created_at) as created_at
+        FROM user_documents 
+        WHERE user_id = ${req.user.id}
+        GROUP BY COALESCE(category, 'General')
+        ORDER BY name
+      `);
+      
+      const folders = result.rows.map((row: any, index: number) => ({
+        id: `folder-${req.user.id}-${row.name.replace(/[^a-zA-Z0-9]/g, '-')}`,
+        name: row.name,
+        documentCount: parseInt(row.document_count),
+        createdAt: row.created_at,
+        isDefault: row.name === 'General'
+      }));
+      
+      res.json(folders);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving folders", error: error.message });
+    }
+  });
+
+  app.post("/api/user-documents/folders", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { name } = req.body;
+      
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        return res.status(400).json({ message: "Folder name is required" });
+      }
+      
+      const folderName = name.trim();
+      
+      // Check if folder already exists for this user
+      const existingFolder = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} AND category = ${folderName}
+      `);
+      
+      if ((existingFolder.rows[0] as any).count > 0) {
+        return res.status(409).json({ message: "Folder already exists" });
+      }
+      
+      // Create a placeholder document to establish the folder in the database
+      // This ensures the folder appears in the folder list even when empty
+      const insertResult = await db.execute(sql`
+        INSERT INTO user_documents (
+          user_id, 
+          title, 
+          description, 
+          file_name,
+          file_type,
+          file_size,
+          file_url,
+          category, 
+          status,
+          is_folder_placeholder
+        ) VALUES (
+          ${req.user.id},
+          '__FOLDER_PLACEHOLDER__',
+          'Folder placeholder - do not display',
+          '__folder_placeholder__',
+          'application/folder',
+          0,
+          '',
+          ${folderName},
+          'draft',
+          true
+        )
+      `);
+      
+      const folderId = `folder-${req.user.id}-${folderName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+      
+      res.status(201).json({
+        id: folderId,
+        name: folderName,
+        documentCount: 0,
+        createdAt: new Date().toISOString(),
+        isDefault: false
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error creating folder", error: error.message });
+    }
+  });
+
+  app.delete("/api/user-documents/folders/:folderId", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { folderId } = req.params;
+      
+      // Extract folder name from ID
+      const folderName = folderId.replace(`folder-${req.user.id}-`, '').replace(/-/g, ' ');
+      
+      // Check if folder has real documents (excluding placeholders)
+      const documentCount = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} 
+          AND category = ${folderName} 
+          AND COALESCE(is_folder_placeholder, false) = false
+      `);
+      
+      if ((documentCount.rows[0] as any).count > 0) {
+        return res.status(400).json({ message: "Cannot delete folder with documents" });
+      }
+      
+      // Delete all documents in this category (including placeholders)
+      await db.execute(sql`
+        DELETE FROM user_documents 
+        WHERE user_id = ${req.user.id} AND category = ${folderName}
+      `);
+      
+      res.status(200).json({ message: "Folder deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting folder", error: error.message });
+    }
+  });
+
   // User Document Repository API
   app.get("/api/user-documents", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
@@ -1202,6 +1340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         title?: string;
         description?: string | null;
         tags?: string[];
+        folderId?: string;
       } = {};
       
       if (req.body.metadata) {
@@ -1247,6 +1386,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // Extract category from folder ID if provided
+        let category = 'General'; // Default category
+        if (metadata.folderId) {
+          // Extract folder name from ID format: folder-{userId}-{folderName}
+          const folderNamePart = metadata.folderId.replace(/^folder-\d+-/, '');
+          category = folderNamePart.replace(/-/g, ' ');
+        }
+
         // Create a new document record
         const newDocument = await storage.createUserDocument({
           userId: req.user.id,
@@ -1257,6 +1404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fileSize: uploadedFile.size,
           fileUrl: objectName, // Store the object path in storage bucket
           tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+          category: category,
         });
         
         console.log("Document created successfully:", newDocument);
