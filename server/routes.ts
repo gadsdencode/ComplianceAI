@@ -31,8 +31,63 @@ const openai = new OpenAI({
 
 const upload = multer();
 
-// Use the real ObjectStorageClient for all environments
-const objectClient = new Client();
+// Environment detection for Replit Object Storage
+const isReplitEnvironment = !!process.env.REPL_ID || !!process.env.REPLIT_DB_URL;
+
+// Create appropriate storage client based on environment
+let objectClient: any;
+
+if (isReplitEnvironment) {
+  // Use real Replit Object Storage in Replit environment
+  objectClient = new Client();
+} else {
+  // Create a development-compatible mock for local development
+  console.log("⚠️  Running in development mode - using mock object storage");
+  console.log("   Note: File uploads will work but won't persist between restarts");
+  
+  class DevelopmentObjectClient {
+    private storage: Map<string, Buffer> = new Map();
+    
+    async uploadFromBytes(key: string, data: Buffer): Promise<any> {
+      this.storage.set(key, data);
+      console.log(`📁 Mock upload: ${key} (${data.length} bytes)`);
+      return { ok: true };
+    }
+    
+    async exists(key: string): Promise<any> {
+      const exists = this.storage.has(key);
+      console.log(`🔍 Mock exists check: ${key} = ${exists}`);
+      return { ok: true, value: exists };
+    }
+    
+    async delete(key: string): Promise<any> {
+      const existed = this.storage.delete(key);
+      console.log(`🗑️ Mock delete: ${key} (existed: ${existed})`);
+      return { ok: true };
+    }
+    
+    async list(options: { prefix: string }): Promise<any> {
+      const results = Array.from(this.storage.keys())
+        .filter(key => key.startsWith(options.prefix))
+        .map(name => ({ name }));
+      console.log(`📋 Mock list: ${options.prefix}* = ${results.length} files`);
+      return { ok: true, value: results };
+    }
+    
+    downloadAsStream(key: string): any {
+      const data = this.storage.get(key) || Buffer.from('');
+      console.log(`⬇️ Mock download stream: ${key} (${data.length} bytes)`);
+      
+      const Readable = require('stream').Readable;
+      const stream = new Readable();
+      stream.push(data);
+      stream.push(null);
+      return stream;
+    }
+  }
+  
+  objectClient = new DevelopmentObjectClient();
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -1247,10 +1302,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      // Use the real ObjectStorageClient with the production bucket for all environments
-      const storageClient = new ObjectStorageClient({
-        bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
-      });
+      // Use appropriate storage client based on environment
+      let storageClient: any;
+      
+      if (isReplitEnvironment) {
+        // Use real ObjectStorageClient in Replit environment
+        storageClient = new ObjectStorageClient({
+          bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+        });
+      } else {
+        // Use the same mock client as document attachments for consistency
+        storageClient = objectClient;
+      }
       
       // Check if file exists in storage
       const existsResult = await storageClient.exists(document.fileUrl);
@@ -1354,11 +1417,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const objectName = `${req.user.id}/${timestamp}-${sanitizedFileName}`;
       
       try {
-        // Use the same ObjectStorageClient for consistency
-        console.log("Initializing Object Storage client with bucket ID: replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826");
-        const objectStorage = new ObjectStorageClient({
-          bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
-        });
+        // Use appropriate storage client based on environment
+        let objectStorage: any;
+        
+        if (isReplitEnvironment) {
+          console.log("Using real Object Storage client with bucket ID: replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826");
+          objectStorage = new ObjectStorageClient({
+            bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+          });
+        } else {
+          console.log("Using development mock storage for file upload");
+          objectStorage = objectClient;
+        }
         
         console.log("Attempting to upload file:", objectName);
         // Upload file to Object Storage
@@ -1470,9 +1540,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete from object storage if it exists
       if (document.fileUrl) {
         try {
-          const objectStorage = new ObjectStorageClient({
-            bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
-          });
+          let objectStorage: any;
+          
+          if (isReplitEnvironment) {
+            objectStorage = new ObjectStorageClient({
+              bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+            });
+          } else {
+            objectStorage = objectClient;
+          }
           
           // Delete the file from storage
           await objectStorage.delete(document.fileUrl);
