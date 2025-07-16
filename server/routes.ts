@@ -77,6 +77,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
   setupAuth(app);
   
+  // Health check endpoint for deployment
+  app.get("/", (req: Request, res: Response) => {
+    res.status(200).json({ 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      service: "ComplianceAI API"
+    });
+  });
+  
   // Documents API
   app.get("/api/documents", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {

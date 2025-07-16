@@ -7,8 +7,7 @@
     "outDir": "dist/server",
     "noEmit": false,
     "allowImportingTsExtensions": false,
-    "esModuleInterop": true,
-    "rootDir": "server"
+    "esModuleInterop": true
   },
   "include": ["server/**/*", "shared/**/*"],
   "exclude": ["node_modules", "client"]
