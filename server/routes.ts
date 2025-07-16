@@ -1315,34 +1315,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storageClient = objectClient;
       }
       
-      // Check if file exists in storage
+      // Check if file exists in storage (EXACTLY like the working document files endpoint)
       const existsResult = await storageClient.exists(document.fileUrl);
       if (!existsResult.ok) {
-        return res.status(500).json({ message: "Error checking file existence", error: existsResult.error });
+        return res.status(500).json({ message: "Error checking file", error: existsResult.error });
       }
       if (!existsResult.value) {
-        return res.status(404).json({ message: "File not found in storage" });
+        return res.status(404).json({ message: "File not found" });
       }
       
-      // Stream the file from object storage
+      // Create the download stream (EXACTLY like the working endpoint)
       const stream = storageClient.downloadAsStream(document.fileUrl);
       const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
       
-      // Set proper headers for file download
+      // Set headers and pipe (EXACTLY like the working endpoint)
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
-      res.setHeader('Content-Length', document.fileSize.toString());
       
-      // Pipe the file stream to the response
+      // Pipe the stream directly to response (just like the working endpoint)
       stream.pipe(res);
-      
-      // Handle stream errors
-      stream.on('error', (error: any) => {
-        console.error('Stream error during download:', error);
-        if (!res.headersSent) {
-          res.status(500).json({ message: "Error streaming file", error: error.message });
-        }
-      });
       
     } catch (error) {
       console.error("Error processing download request:", error);
