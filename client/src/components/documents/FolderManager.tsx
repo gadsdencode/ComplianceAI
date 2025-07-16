@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FolderPlus, 
@@ -211,13 +211,18 @@ const FolderCard: React.FC<FolderCardProps> = ({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
+      whileHover={{ 
+        scale: 1.02,
+        transition: { type: "spring", stiffness: 400, damping: 25 }
+      }}
+      data-folder-id={folder.id}
       className={`
         relative group p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer
         ${isDragOver 
-          ? 'border-blue-400 bg-blue-50 shadow-lg scale-105' 
-          : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
+          ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-blue-100 shadow-2xl scale-105 animate-pulse' 
+          : 'border-gray-200 hover:border-blue-300 hover:shadow-lg hover:bg-gradient-to-br hover:from-white hover:to-blue-50'
         }
-        bg-white
+        bg-white backdrop-blur-sm
       `}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
@@ -240,11 +245,17 @@ const FolderCard: React.FC<FolderCardProps> = ({
       {/* Folder Icon */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          {isDragOver ? (
-            <FolderOpen className="w-8 h-8 text-blue-500" />
-          ) : (
-            <Folder className="w-8 h-8 text-blue-500" />
-          )}
+          <motion.div
+            whileHover={{ rotate: isDragOver ? 0 : -5, scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          >
+            {isDragOver ? (
+              <FolderOpen className="w-8 h-8 text-blue-500" />
+            ) : (
+              <Folder className="w-8 h-8 text-blue-500" />
+            )}
+          </motion.div>
           <div className="flex-1">
             {isEditing ? (
               <div className="flex items-center gap-2">
@@ -262,9 +273,13 @@ const FolderCard: React.FC<FolderCardProps> = ({
                 />
               </div>
             ) : (
-              <h3 className="font-medium text-gray-900 text-sm truncate">
+              <motion.h3 
+                className="font-medium text-gray-900 text-sm truncate group-hover:text-blue-600 transition-colors"
+                whileHover={{ x: 2 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              >
                 {folder.name}
-              </h3>
+              </motion.h3>
             )}
           </div>
         </div>
@@ -273,36 +288,43 @@ const FolderCard: React.FC<FolderCardProps> = ({
         <AnimatePresence>
           {showActions && !isEditing && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.8, x: 10 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.8, x: 10 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
               className="flex items-center gap-1"
             >
-              <button
+              <motion.button
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={handleUploadClick}
                 className="p-1 rounded-md hover:bg-blue-100 transition-colors"
                 title="Upload files to this folder"
               >
                 <Upload className="w-4 h-4 text-blue-600" />
-              </button>
+              </motion.button>
               
               {!folder.isDefault && (
                 <>
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
                     onClick={() => setIsEditing(true)}
                     className="p-1 rounded-md hover:bg-gray-100 transition-colors"
                     title="Rename folder"
                   >
                     <Edit2 className="w-4 h-4 text-gray-600" />
-                  </button>
+                  </motion.button>
                   
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.1, rotate: -5 }}
+                    whileTap={{ scale: 0.9 }}
                     onClick={() => onDelete(folder.id)}
                     className="p-1 rounded-md hover:bg-red-100 transition-colors"
                     title="Delete folder"
                   >
                     <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
+                  </motion.button>
                 </>
               )}
             </motion.div>
@@ -311,30 +333,75 @@ const FolderCard: React.FC<FolderCardProps> = ({
       </div>
 
       {/* Document Count */}
-      <div className="text-xs text-gray-500 flex items-center gap-1">
+      <motion.div 
+        className="text-xs text-gray-500 flex items-center gap-1 mb-3"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
         <FileText className="w-3 h-3" />
-        {folder.documentCount} {folder.documentCount === 1 ? 'document' : 'documents'}
-      </div>
-
-      {/* Drag overlay */}
-      {isDragOver && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="absolute inset-0 bg-blue-100/50 rounded-xl flex items-center justify-center border-2 border-blue-400 border-dashed"
+        <motion.span
+          key={folder.documentCount}
+          initial={{ scale: 1.2, color: "#3b82f6" }}
+          animate={{ scale: 1, color: "#6b7280" }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
         >
-          <div className="text-blue-600 text-center">
-            <Upload className="w-8 h-8 mx-auto mb-2" />
-            <p className="text-sm font-medium">Drop files here</p>
-          </div>
-        </motion.div>
-      )}
+          {folder.documentCount} {folder.documentCount === 1 ? 'document' : 'documents'}
+        </motion.span>
+      </motion.div>
 
-      {/* Default folder indicator */}
+      {/* Drag overlay with enhanced animation */}
+      <AnimatePresence>
+        {isDragOver && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+            className="absolute inset-0 bg-gradient-to-br from-blue-100/80 to-blue-200/60 rounded-xl flex items-center justify-center border-2 border-blue-400 border-dashed backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1, type: "spring", stiffness: 400, damping: 20 }}
+              className="text-blue-600 text-center"
+            >
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  rotate: [0, 5, -5, 0]
+                }}
+                transition={{ 
+                  duration: 0.6, 
+                  repeat: Infinity,
+                  repeatType: "reverse"
+                }}
+              >
+                <Upload className="w-8 h-8 mx-auto mb-2" />
+              </motion.div>
+              <motion.p 
+                className="text-sm font-medium"
+                animate={{ opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                Drop here
+              </motion.p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Default folder indicator with animation */}
       {folder.isDefault && (
-        <div className="absolute top-2 right-2 bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
+        <motion.div 
+          className="absolute top-2 right-2 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full shadow-sm"
+          initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          whileHover={{ scale: 1.05, rotate: 2 }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+        >
           Default
-        </div>
+        </motion.div>
       )}
     </motion.div>
   );
@@ -353,6 +420,21 @@ export default function FolderManager({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Add global drag end handler to ensure overlay clears when drag ends
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      setDragOverFolder(null);
+    };
+
+    document.addEventListener('dragend', handleGlobalDragEnd);
+    document.addEventListener('drop', handleGlobalDragEnd);
+
+    return () => {
+      document.removeEventListener('dragend', handleGlobalDragEnd);
+      document.removeEventListener('drop', handleGlobalDragEnd);
+    };
+  }, []);
 
   const handleCreateFolder = async (name: string) => {
     try {
@@ -424,8 +506,10 @@ export default function FolderManager({
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only clear if we're leaving the actual folder card
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+    
+    // Clear drag state when leaving the folder card or when relatedTarget is null (drag ended)
+    const relatedTarget = e.relatedTarget as Node;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
       setDragOverFolder(null);
     }
   }, []);
@@ -458,7 +542,29 @@ export default function FolderManager({
             return;
           }
           
+          // Add loading state and success animation
+          const folderCard = document.querySelector(`[data-folder-id="${folderId}"]`) as HTMLElement;
+          if (folderCard) {
+            folderCard.style.transform = 'scale(0.95)';
+            folderCard.style.transition = 'transform 0.2s ease';
+          }
+          
           await onMoveDocument(dragData.documentId, folderId, dragData.currentCategory);
+          
+          // Success animation
+          if (folderCard) {
+            folderCard.style.transform = 'scale(1.05)';
+            setTimeout(() => {
+              folderCard.style.transform = 'scale(1)';
+              
+              // Add a subtle pulse effect
+              folderCard.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.3)';
+              setTimeout(() => {
+                folderCard.style.boxShadow = '';
+                folderCard.style.transition = '';
+              }, 500);
+            }, 200);
+          }
           
           toast({
             title: "Document Moved",
@@ -510,41 +616,104 @@ export default function FolderManager({
       </div>
 
       {/* Folders Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <motion.div 
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          hidden: { opacity: 0 },
+          visible: {
+            opacity: 1,
+            transition: {
+              staggerChildren: 0.1,
+              delayChildren: 0.2
+            }
+          }
+        }}
+      >
         <AnimatePresence>
-          {folders.map((folder) => (
-            <FolderCard
+          {folders.map((folder, index) => (
+            <motion.div
               key={folder.id}
-              folder={folder}
-              onRename={handleRenameFolder}
-              onDelete={handleDeleteFolder}
-              onUpload={onUploadToFolder}
-              onMoveDocument={onMoveDocument}
-              isDragOver={dragOverFolder === folder.id}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            />
+              variants={{
+                hidden: { opacity: 0, y: 20, scale: 0.9 },
+                visible: { 
+                  opacity: 1, 
+                  y: 0, 
+                  scale: 1,
+                  transition: {
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 24,
+                    delay: index * 0.05
+                  }
+                }
+              }}
+              layout
+            >
+              <FolderCard
+                folder={folder}
+                onRename={handleRenameFolder}
+                onDelete={handleDeleteFolder}
+                onUpload={onUploadToFolder}
+                onMoveDocument={onMoveDocument}
+                isDragOver={dragOverFolder === folder.id}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              />
+            </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {/* Empty State */}
       {folders.length === 0 && (
-        <div className="text-center py-12">
-          <FolderPlus className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No folders yet</h3>
-          <p className="text-gray-500 mb-4">
-            Create your first folder to organize your documents
-          </p>
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700"
+        <motion.div 
+          className="text-center py-12"
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 30 }}
+        >
+          <motion.div
+            initial={{ scale: 0.8, rotate: -10 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ delay: 0.4, type: "spring", stiffness: 400, damping: 25 }}
           >
-            <FolderPlus className="w-4 h-4 mr-2" />
-            Create First Folder
-          </Button>
-        </div>
+            <FolderPlus className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          </motion.div>
+          <motion.h3 
+            className="text-lg font-medium text-gray-900 mb-2"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            No folders yet
+          </motion.h3>
+          <motion.p 
+            className="text-gray-500 mb-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            Create your first folder to organize your documents
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.7, type: "spring", stiffness: 400, damping: 25 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Create First Folder
+            </Button>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Create Folder Modal */}
