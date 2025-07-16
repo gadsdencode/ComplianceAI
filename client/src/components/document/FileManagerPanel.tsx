@@ -74,6 +74,8 @@ export default function FileManagerPanel({ documentId }: FileManagerPanelProps) 
     <div className="space-y-4">
       <div className="flex items-center space-x-2">
         <input
+          title="Upload file"
+          placeholder="Upload file"
           type="file"
           onChange={e => e.target.files && setSelectedFile(e.target.files[0])}
           className="text-sm text-slate-600"

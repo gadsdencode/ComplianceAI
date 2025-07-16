@@ -1286,27 +1286,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      // Instead of trying to serve the file directly, we'll just redirect to a download
-      // This approach works with any storage system configuration
-      res.status(200).json({
-        success: true,
-        message: "Direct previews are not available. Please download file to view.",
-        document: {
-          id: document.id,
-          title: document.title,
-          fileName: document.fileName,
-          fileType: document.fileType,
-          fileSize: document.fileSize,
-          createdAt: document.createdAt,
-          updatedAt: document.updatedAt
+      // Initialize the appropriate Object Storage client
+      let storageClient;
+      if (isDevelopment) {
+        // Use the existing mock client for development
+        storageClient = objectClient;
+      } else {
+        // Use the real ObjectStorageClient for production
+        storageClient = new ObjectStorageClient({
+          bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+        });
+      }
+      
+      // Check if file exists in storage
+      const existsResult = await storageClient.exists(document.fileUrl);
+      if (!existsResult.ok) {
+        return res.status(500).json({ message: "Error checking file existence", error: existsResult.error });
+      }
+      if (!existsResult.value) {
+        return res.status(404).json({ message: "File not found in storage" });
+      }
+      
+      // Stream the file from object storage
+      const stream = storageClient.downloadAsStream(document.fileUrl);
+      const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
+      
+      // Set proper headers for file download
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+      res.setHeader('Content-Length', document.fileSize.toString());
+      
+      // Pipe the file stream to the response
+      stream.pipe(res);
+      
+      // Handle stream errors
+      stream.on('error', (error: any) => {
+        console.error('Stream error during download:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Error streaming file", error: error.message });
         }
       });
+      
     } catch (error) {
       console.error("Error processing download request:", error);
-      res.status(500).json({ 
-        message: "Error processing request", 
-        error: error instanceof Error ? error.message : String(error)
-      });
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          message: "Error processing request", 
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
   });
   
