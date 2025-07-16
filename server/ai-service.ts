@@ -1,4 +1,4 @@
-import { Template } from "@shared/schema";
+import { Template } from "../shared/schema.js";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 

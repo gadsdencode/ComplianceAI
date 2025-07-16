@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { 
   insertDocumentSchema, insertSignatureSchema, 
   insertComplianceDeadlineSchema, insertTemplateSchema 
-} from "@shared/schema";
+} from "../shared/schema.js";
 import { aiService } from "./ai-service.js";
 import OpenAI from "openai";
 import { Client as ObjectStorageClient } from "@replit/object-storage";

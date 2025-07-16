@@ -5,7 +5,7 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage.js";
-import { User as SelectUser, User } from "@shared/schema";
+import { User as SelectUser, User } from "../shared/schema.js";
 import dotenv from "dotenv";
 
 dotenv.config();

@@ -1,10 +1,10 @@
-import { users, documents, documentVersions, signatures, auditTrail, complianceDeadlines, templates, userDocuments } from "@shared/schema";
+import { users, documents, documentVersions, signatures, auditTrail, complianceDeadlines, templates, userDocuments } from "../shared/schema.js";
 import type { 
   User, InsertUser, Document, InsertDocument, DocumentVersion, InsertDocumentVersion,
   Signature, InsertSignature, AuditTrail, InsertAuditTrail, 
   ComplianceDeadline, InsertComplianceDeadline, Template, InsertTemplate,
   UserDocument, InsertUserDocument
-} from "@shared/schema";
+} from "../shared/schema.js";
 import session from "express-session";
 import { eq, gt, desc, asc, and, sql } from "drizzle-orm";
 import { db } from "./db.js";
