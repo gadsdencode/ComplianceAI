@@ -95,6 +95,9 @@ export const userDocuments = pgTable("user_documents", {
   fileSize: integer("file_size").notNull(),
   fileUrl: text("file_url").notNull(),
   tags: text("tags").array(),
+  category: varchar("category", { length: 100 }).default("General"),
+  starred: boolean("starred").default(false),
+  status: text("status", { enum: ["draft", "review", "approved", "archived"] }).default("draft"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

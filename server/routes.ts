@@ -220,6 +220,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error updating document", error: error.message });
     }
   });
+
+  // Update document status only
+  app.patch("/api/documents/:id/status", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const document = await storage.getDocument(parseInt(req.params.id));
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Check permissions
+      if (req.user.role === "employee" && document.createdById !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ message: "Status is required" });
+      }
+      
+      const updatedDocument = await storage.updateDocument(parseInt(req.params.id), { status });
+      
+      // Create audit trail record
+      await storage.createAuditRecord({
+        documentId: document.id,
+        userId: req.user.id,
+        action: "STATUS_CHANGED",
+        details: `Document "${document.title}" status changed to ${status}`,
+        ipAddress: req.ip
+      });
+      
+      res.json(updatedDocument);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating document status", error: error.message });
+    }
+  });
+
+  // Duplicate document
+  app.post("/api/documents/:id/duplicate", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const originalDocument = await storage.getDocument(parseInt(req.params.id));
+      
+      if (!originalDocument) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Check permissions
+      if (req.user.role === "employee" && originalDocument.createdById !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Create duplicate with new title and reset version
+      const duplicateData = {
+        title: `${originalDocument.title} (Copy)`,
+        content: originalDocument.content,
+        status: "draft" as const,
+        templateId: originalDocument.templateId,
+        version: 1,
+        createdById: req.user.id
+      };
+      
+      const duplicateDocument = await storage.createDocument(duplicateData);
+      
+      // Create audit trail record for original document
+      await storage.createAuditRecord({
+        documentId: originalDocument.id,
+        userId: req.user.id,
+        action: "DOCUMENT_DUPLICATED",
+        details: `Document "${originalDocument.title}" duplicated as "${duplicateDocument.title}"`,
+        ipAddress: req.ip
+      });
+      
+      // Create audit trail record for new document
+      await storage.createAuditRecord({
+        documentId: duplicateDocument.id,
+        userId: req.user.id,
+        action: "DOCUMENT_CREATED",
+        details: `Document "${duplicateDocument.title}" created as duplicate`,
+        ipAddress: req.ip
+      });
+      
+      res.json(duplicateDocument);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error duplicating document", error: error.message });
+    }
+  });
   
   // Document versions API
   app.get("/api/documents/:id/versions", async (req: Request, res: Response) => {
@@ -323,6 +417,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(auditTrail);
     } catch (error: any) {
       res.status(500).json({ message: "Error retrieving audit trail", error: error.message });
+    }
+  });
+
+  // Compliance document download API
+  app.get("/api/documents/:id/download", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const document = await storage.getDocument(parseInt(req.params.id));
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Check if user has access to the document
+      if (req.user.role === "employee" && document.createdById !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Create audit trail record
+      await storage.createAuditRecord({
+        documentId: document.id,
+        userId: req.user.id,
+        action: "DOCUMENT_DOWNLOADED",
+        details: `Document "${document.title}" downloaded`,
+        ipAddress: req.ip
+      });
+      
+      // For compliance documents, we'll export the content as a downloadable text file
+      const content = `${document.title}\n\n${document.content}`;
+      const fileName = `${document.title.replace(/[^a-zA-Z0-9]/g, '_')}_v${document.version}.txt`;
+      
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(content);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error downloading document", error: error.message });
     }
   });
   
@@ -1148,6 +1281,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  app.patch("/api/user-documents/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      
+      // Check if document exists and belongs to user
+      const document = await storage.getUserDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      if (document.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Update the document
+      const updatedDocument = await storage.updateUserDocument(documentId, req.body);
+      
+      res.status(200).json(updatedDocument);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating document", error: error.message });
+    }
+  });
+
   app.delete("/api/user-documents/:id", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -1188,6 +1349,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ message: "Document deleted successfully" });
     } catch (error: any) {
       res.status(500).json({ message: "Error deleting document", error: error.message });
+    }
+  });
+
+  // Duplicate user document
+  app.post("/api/user-documents/:id/duplicate", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const originalDocumentId = parseInt(req.params.id);
+      
+      // Check if document exists and belongs to user
+      const originalDocument = await storage.getUserDocument(originalDocumentId);
+      
+      if (!originalDocument) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      if (originalDocument.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Create duplicate with new title and reset status to draft
+      const duplicateData = {
+        userId: req.user.id,
+        title: `${originalDocument.title} (Copy)`,
+        description: originalDocument.description,
+        fileName: `copy_${originalDocument.fileName}`,
+        fileType: originalDocument.fileType,
+        fileSize: originalDocument.fileSize,
+        fileUrl: originalDocument.fileUrl, // Keep the same file URL since it's the same content
+        tags: originalDocument.tags,
+        category: originalDocument.category,
+        starred: false, // Reset starred status
+        status: "draft" as const // Reset to draft
+      };
+      
+      const duplicateDocument = await storage.createUserDocument(duplicateData);
+      
+      res.json(duplicateDocument);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error duplicating document", error: error.message });
     }
   });
 

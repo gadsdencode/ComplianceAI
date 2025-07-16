@@ -158,6 +158,9 @@ export interface UserDocument {
   fileSize: number;
   fileUrl: string;
   tags?: string[];
+  category?: string;
+  starred?: boolean;
+  status?: "draft" | "review" | "approved" | "archived";
   createdAt: string;
   updatedAt: string;
 }

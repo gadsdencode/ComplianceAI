@@ -16,6 +16,7 @@ import DocumentDetailPage from "@/pages/document-detail-page";
 import ComplianceDeadlinePage from '@/pages/compliance-deadline-page';
 import DocumentDashboardPage from '@/pages/document-dashboard-page';
 import DocumentRepositoryPage from "@/pages/document-repository-page";
+import DocumentsPage from "@/pages/documents-page";
 
 
 function Router() {
@@ -24,6 +25,8 @@ function Router() {
       <ProtectedRoute path="/" component={DashboardPage} />
       <ProtectedRoute path="/document-repository" component={DocumentRepositoryPage} />
       <ProtectedRoute path="/document-repository/:id" component={DocumentDetailPage} />
+      <ProtectedRoute path="/documents" component={DocumentsPage} />
+      <ProtectedRoute path="/documents/:id" component={DocumentDetailPage} />
       <ProtectedRoute path="/templates" component={TemplatesPage} />
       <ProtectedRoute path="/signatures" component={SignaturesPage} />
       <ProtectedRoute path="/audit" component={AuditPage} />

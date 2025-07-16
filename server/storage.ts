@@ -66,6 +66,7 @@ export interface IStorage {
   getUserDocuments(userId: number): Promise<UserDocument[]>;
   getUserDocument(id: number): Promise<UserDocument | undefined>;
   createUserDocument(document: InsertUserDocument): Promise<UserDocument>;
+  updateUserDocument(id: number, data: Partial<InsertUserDocument>): Promise<UserDocument | undefined>;
   deleteUserDocument(id: number): Promise<void>;
   
   // Session store
@@ -485,6 +486,18 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return newDocument;
+  }
+  
+  async updateUserDocument(id: number, data: Partial<InsertUserDocument>): Promise<UserDocument | undefined> {
+    const [updatedDocument] = await db
+      .update(userDocuments)
+      .set({
+        ...data,
+        updatedAt: new Date()
+      })
+      .where(eq(userDocuments.id, id))
+      .returning();
+    return updatedDocument;
   }
   
   async deleteUserDocument(id: number): Promise<void> {
