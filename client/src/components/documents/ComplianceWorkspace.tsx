@@ -34,6 +34,7 @@ import DocumentViewer from '@/components/documents/DocumentViewer';
 import FileUploader from '@/components/documents/FileUploader';
 import DocumentMoreOptions from '@/components/documents/DocumentMoreOptions';
 import UserDocumentEditModal from '@/components/documents/UserDocumentEditModal';
+import ShareModal from '@/components/documents/ShareModal';
 
 interface FileNode {
   id: string;
@@ -303,6 +304,7 @@ const ComplianceWorkspace: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [viewingDocument, setViewingDocument] = useState<UserDocument | null>(null);
   const [editingDocument, setEditingDocument] = useState<UserDocument | null>(null);
+  const [sharingDocument, setSharingDocument] = useState<UserDocument | Document | null>(null);
   const [isUploadMode, setIsUploadMode] = useState(false);
   const [starredComplianceDocs, setStarredComplianceDocs] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
@@ -616,19 +618,7 @@ const ComplianceWorkspace: React.FC = () => {
   const handleShareDocument = (node: FileNode) => {
     if (!node.document) return;
     
-    const shareUrl = `${window.location.origin}/documents/${node.document.id}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      toast({
-        title: "Link Copied",
-        description: "Document link has been copied to clipboard.",
-      });
-    }).catch(() => {
-      toast({
-        title: "Share Failed",
-        description: "Could not copy link to clipboard.",
-        variant: "destructive",
-      });
-    });
+    setSharingDocument(node.document);
   };
 
   const handleDownloadDocument = (node: FileNode) => {
@@ -902,6 +892,16 @@ const ComplianceWorkspace: React.FC = () => {
             onClose={() => setEditingDocument(null)}
             onSave={handleSaveDocumentEdit}
             isSaving={editDocumentMutation.isPending}
+          />
+        )}
+
+        {/* Document Share Modal */}
+        {sharingDocument && (
+          <ShareModal
+            document={sharingDocument}
+            isOpen={!!sharingDocument}
+            onClose={() => setSharingDocument(null)}
+            onDownload={() => handleDownloadDocument({ document: sharingDocument } as FileNode)}
           />
         )}
       </div>
