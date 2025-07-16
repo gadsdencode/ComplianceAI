@@ -10,7 +10,8 @@
     "rootDir": ".",
     "noEmit": false,
     "allowImportingTsExtensions": false,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "incremental": false
   },
   "include": ["server/**/*", "shared/**/*"],
   "exclude": ["node_modules", "client"]
