@@ -48,6 +48,9 @@ interface FileNode {
   tags?: string[];
   starred?: boolean;
   document?: UserDocument | Document;
+  folderId?: string; // For managed folders
+  documentCount?: number; // For managed folders
+  isManaged?: boolean; // For managed folders
 }
 
 interface GridItemProps {
@@ -120,6 +123,7 @@ const GridItem: React.FC<GridItemProps> = ({
         documentId: node.document.id,
         documentType: 'type' in node.document ? node.document.type : 'user',
         currentCategory: 'category' in node.document ? node.document.category : 'Compliance',
+        currentFolderId: 'folderId' in node.document ? node.document.folderId : null,
         sourceNodeId: node.id
       };
       e.dataTransfer.setData('application/json', JSON.stringify(dragData));
@@ -133,9 +137,11 @@ const GridItem: React.FC<GridItemProps> = ({
     } else if (node.type === "folder") {
       const dragData = {
         type: 'folder',
-        folderId: node.id,
+        folderId: node.folderId || node.id,
         folderName: node.name,
-        sourceNodeId: node.id
+        sourceNodeId: node.id,
+        isManaged: node.isManaged || false,
+        documentCount: node.documentCount || 0
       };
       e.dataTransfer.setData('application/json', JSON.stringify(dragData));
       e.dataTransfer.effectAllowed = 'move';
@@ -181,14 +187,18 @@ const GridItem: React.FC<GridItemProps> = ({
         const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
         
         if (dragData.type === 'document' && dragData.documentType === 'user') {
-          // Move document to folder
-          if (onMoveToFolder) {
-            onMoveToFolder(dragData.documentId, node.id, dragData.sourceNodeId);
+          // Move document to folder - use the actual folder ID for managed folders
+          const targetFolderId = node.isManaged ? node.folderId : node.id;
+          if (onMoveToFolder && targetFolderId) {
+            onMoveToFolder(dragData.documentId, targetFolderId, dragData.sourceNodeId);
           }
         } else if (dragData.type === 'folder' && dragData.sourceNodeId !== node.id) {
-          // Move folder into this folder (create subfolder relationship)
-          if (onMoveToFolder) {
-            onMoveToFolder(dragData.folderId, node.id, dragData.sourceNodeId);
+          // Only allow moving managed folders for now
+          if (dragData.isManaged && node.isManaged) {
+            // Move folder into this folder (create subfolder relationship)
+            if (onMoveToFolder) {
+              onMoveToFolder(dragData.folderId, node.folderId || node.id, dragData.sourceNodeId);
+            }
           }
         }
       } catch (error) {
@@ -368,9 +378,18 @@ const GridItem: React.FC<GridItemProps> = ({
         </div>
 
         {/* Children count for folders */}
-        {node.type === "folder" && node.children && (
-          <div className="absolute top-2 right-2 bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded-full">
-            {node.children.length}
+        {node.type === "folder" && (
+          <div className="absolute top-2 right-2 flex items-center gap-1">
+            {node.isManaged && (
+              <div className="bg-green-500/20 text-green-300 text-xs px-2 py-1 rounded-full border border-green-500/30">
+                Managed
+              </div>
+            )}
+            {(node.children || node.documentCount !== undefined) && (
+              <div className="bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded-full">
+                {node.documentCount !== undefined ? node.documentCount : (node.children?.length || 0)}
+              </div>
+            )}
           </div>
         )}
 
@@ -691,40 +710,82 @@ const ComplianceWorkspace: React.FC = () => {
   const transformToFileNodes = (): FileNode[] => {
     if (!userDocuments && !complianceDocuments) return [];
 
-    const folders: Record<string, FileNode> = {};
+    const folderNodes: Record<string, FileNode> = {};
     const allDocuments = [
       ...(userDocuments || []).map(doc => ({ ...doc, type: 'user' as const })),
       ...(complianceDocuments || []).map(doc => ({ ...doc, type: 'compliance' as const }))
     ];
 
+    // Only create managed folders if they are actually loaded
+    if (folders && Array.isArray(folders)) {
+      folders.forEach(folder => {
+        folderNodes[folder.id] = {
+          id: `managed-folder-${folder.id}`,
+          name: folder.name,
+          type: "folder",
+          children: [],
+          modified: formatDate(folder.createdAt || new Date().toISOString()),
+          folderId: folder.id, // Store original folder ID for operations
+          documentCount: folder.documentCount || 0,
+          isManaged: true // Flag to distinguish from category folders
+        };
+      });
+    }
+
+    // Then, process documents and create category folders as needed
     allDocuments.forEach(doc => {
       const category = ('category' in doc ? doc.category : 'Compliance') || 'General';
+      const documentFolderId = 'folderId' in doc ? doc.folderId : null;
       
-      if (!folders[category]) {
-        folders[category] = {
-          id: `folder-${category}`,
-          name: category,
-          type: "folder",
-          children: []
+      // If document has a folderId, assign it to that managed folder
+      if (documentFolderId && folderNodes[`managed-folder-${documentFolderId}`]) {
+        const targetFolder = folderNodes[`managed-folder-${documentFolderId}`];
+        
+        const fileNode: FileNode = {
+          id: `${doc.type}-${doc.id}`,
+          name: doc.title,
+          type: "file",
+          size: 'fileSize' in doc ? formatFileSize(doc.fileSize) : undefined,
+          modified: formatDate(doc.updatedAt || doc.createdAt),
+          status: doc.status as any,
+          tags: 'tags' in doc ? doc.tags : undefined,
+          starred: 'starred' in doc ? doc.starred : starredComplianceDocs.has(doc.id),
+          document: doc
         };
+
+        targetFolder.children!.push(fileNode);
+        targetFolder.documentCount = (targetFolder.documentCount || 0) + 1;
+      } else {
+        // Otherwise, create/use category folder
+        const categoryFolderId = `category-folder-${category}`;
+        
+        if (!folderNodes[categoryFolderId]) {
+          folderNodes[categoryFolderId] = {
+            id: categoryFolderId,
+            name: category,
+            type: "folder",
+            children: [],
+            isManaged: false // Category folder, not managed
+          };
+        }
+
+        const fileNode: FileNode = {
+          id: `${doc.type}-${doc.id}`,
+          name: doc.title,
+          type: "file",
+          size: 'fileSize' in doc ? formatFileSize(doc.fileSize) : undefined,
+          modified: formatDate(doc.updatedAt || doc.createdAt),
+          status: doc.status as any,
+          tags: 'tags' in doc ? doc.tags : undefined,
+          starred: 'starred' in doc ? doc.starred : starredComplianceDocs.has(doc.id),
+          document: doc
+        };
+
+        folderNodes[categoryFolderId].children!.push(fileNode);
       }
-
-      const fileNode: FileNode = {
-        id: `${doc.type}-${doc.id}`,
-        name: doc.title,
-        type: "file",
-        size: 'fileSize' in doc ? formatFileSize(doc.fileSize) : undefined,
-        modified: formatDate(doc.updatedAt || doc.createdAt),
-        status: doc.status as any,
-        tags: 'tags' in doc ? doc.tags : undefined,
-        starred: 'starred' in doc ? doc.starred : starredComplianceDocs.has(doc.id),
-        document: doc
-      };
-
-      folders[category].children!.push(fileNode);
     });
 
-    return Object.values(folders);
+    return Object.values(folderNodes);
   };
 
   const fileNodes = transformToFileNodes();
@@ -882,8 +943,12 @@ const ComplianceWorkspace: React.FC = () => {
 
   const handleMoveToFolder = async (itemId: string, targetFolderId: string, sourceNodeId: string) => {
     try {
-      // Find the target folder name for better user feedback
-      const targetFolder = fileNodes.find(folder => folder.id === targetFolderId);
+      // Find the target folder for better user feedback
+      const targetFolder = fileNodes.find(folder => 
+        folder.id === targetFolderId || 
+        folder.folderId === targetFolderId ||
+        folder.id === `managed-folder-${targetFolderId}`
+      );
       const targetFolderName = targetFolder?.name || 'folder';
       
       // Determine if we're moving a document or a folder
@@ -897,35 +962,54 @@ const ComplianceWorkspace: React.FC = () => {
       const isMovingFolder = sourceNode.type === 'folder';
       const itemName = sourceNode.name;
       
-      // Show success toast
+      // For managed folders, use actual API calls
+      if (targetFolder?.isManaged) {
+        if (isMovingFolder && sourceNode.isManaged) {
+          // Moving a managed folder into another managed folder
+          // This would require backend support for nested folders
+          toast({
+            title: "Feature Not Available",
+            description: "Nested managed folders are not yet supported.",
+            variant: "destructive",
+          });
+          return;
+        } else if (!isMovingFolder && sourceNode.document && 'userId' in sourceNode.document) {
+          // Moving a user document to a managed folder
+          try {
+            await apiRequest('PATCH', `/api/user-documents/${itemId}`, { 
+              category: targetFolderName 
+            });
+            
+            // Refresh data
+            queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+            
+            toast({
+              title: "Document Moved",
+              description: `${itemName} has been moved to ${targetFolderName}.`,
+            });
+            return;
+          } catch (apiError) {
+            throw new Error('Failed to move document to folder');
+          }
+        }
+      }
+      
+      // For category folders or other operations, show success toast
+      // (these are visual operations for now)
       toast({
         title: `${isMovingFolder ? 'Folder' : 'Document'} Moved`,
         description: `${itemName} has been moved to ${targetFolderName}.`,
       });
       
-      // TODO: Implement actual API calls when backend is ready
-      if (isMovingFolder) {
-        // API call for moving folder
-        // await apiRequest('PATCH', `/api/user-documents/folders/${itemId}`, { 
-        //   parentFolderId: targetFolderId 
-        // });
-      } else {
-        // API call for moving document
-        // await apiRequest('PATCH', `/api/user-documents/${itemId}`, { 
-        //   category: targetFolderName 
-        // });
-      }
-      // queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
-      // queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
-      
-          } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        toast({
-          title: "Error",
-          description: `Failed to move ${errorMessage.includes('folder') ? 'folder' : 'item'}.`,
-          variant: "destructive",
-        });
-      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: "Error",
+        description: `Failed to move item: ${errorMessage}`,
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusColor = (status?: string) => {
@@ -1101,12 +1185,17 @@ const ComplianceWorkspace: React.FC = () => {
             
             try {
               const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
-              if (dragData.type === 'folder') {
+              if (dragData.type === 'folder' && dragData.isManaged) {
                 toast({
-                  title: "Folder Moved",
-                  description: `${dragData.folderName} has been moved to the main area.`,
+                  title: "Folder Organized",
+                  description: `${dragData.folderName} is now displayed in the main area.`,
                 });
-                // TODO: API call to move folder to root level
+                // Managed folders are already displayed in main area by default
+              } else if (dragData.type === 'document') {
+                toast({
+                  title: "Document Organization",
+                  description: "Documents can be moved between folders by dropping them on folder icons.",
+                });
               }
             } catch (error) {
               console.error('Error handling main area drop:', error);

@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Configure Neon for better connection handling
 neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
@@ -14,5 +15,13 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Configure pool with proper timeout and connection settings for Neon
+export const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 10000, // 10 seconds as recommended by Neon
+  idleTimeoutMillis: 30000, // 30 seconds 
+  max: 20, // Reasonable max connections for Neon
+  ssl: { rejectUnauthorized: false }
+});
+
 export const db = drizzle({ client: pool, schema });
