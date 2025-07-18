@@ -11,7 +11,10 @@ import {
   Save,
   Plus,
   Folder,
-  FolderOpen
+  FolderOpen,
+  CheckSquare,
+  Square,
+  MoreVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -157,6 +160,9 @@ interface FolderCardProps {
   onDragOver: (e: React.DragEvent, folderId: string) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, folderId: string) => void;
+  isMultiSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (folderId: string) => void;
 }
 
 const FolderCard: React.FC<FolderCardProps> = ({
@@ -168,7 +174,10 @@ const FolderCard: React.FC<FolderCardProps> = ({
   isDragOver,
   onDragOver,
   onDragLeave,
-  onDrop
+  onDrop,
+  isMultiSelectMode = false,
+  isSelected = false,
+  onSelect
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(folder.name);
@@ -176,13 +185,59 @@ const FolderCard: React.FC<FolderCardProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     const trimmedName = editName.trim();
-    if (trimmedName && trimmedName !== folder.name) {
-      onRename(folder.id, trimmedName);
+    
+    if (!trimmedName) {
+      toast({
+        title: "Invalid Name",
+        description: "Folder name cannot be empty.",
+        variant: "destructive",
+      });
+      return;
     }
-    setIsEditing(false);
-    setEditName(folder.name);
+    
+    if (trimmedName.length < 2) {
+      toast({
+        title: "Invalid Name",
+        description: "Folder name must be at least 2 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (trimmedName.length > 50) {
+      toast({
+        title: "Invalid Name",
+        description: "Folder name must be less than 50 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check for invalid characters
+    const invalidChars = /[<>:"/\\|?*]/;
+    if (invalidChars.test(trimmedName)) {
+      toast({
+        title: "Invalid Name",
+        description: "Folder name contains invalid characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (trimmedName === folder.name) {
+      setIsEditing(false);
+      return;
+    }
+    
+    try {
+      await onRename(folder.id, trimmedName);
+      setIsEditing(false);
+    } catch (error) {
+      // Error handling is done in the parent component
+      setEditName(folder.name); // Reset to original name on error
+    }
   };
 
   const handleCancelEdit = () => {
@@ -245,6 +300,20 @@ const FolderCard: React.FC<FolderCardProps> = ({
       {/* Folder Icon */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
+          {isMultiSelectMode && (
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => onSelect?.(folder.id)}
+              className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+            >
+              {isSelected ? (
+                <CheckSquare className="w-5 h-5 text-blue-600" />
+              ) : (
+                <Square className="w-5 h-5 text-gray-400" />
+              )}
+            </motion.button>
+          )}
           <motion.div
             whileHover={{ rotate: isDragOver ? 0 : -5, scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
@@ -419,6 +488,8 @@ export default function FolderManager({
 }: FolderManagerProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { toast } = useToast();
 
   // Add global drag end handler to ensure overlay clears when drag ends
@@ -495,6 +566,69 @@ export default function FolderManager({
         variant: "destructive",
       });
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFolders.size === 0) return;
+
+    const foldersToDelete = folders.filter(f => 
+      selectedFolders.has(f.id) && !f.isDefault && f.documentCount === 0
+    );
+
+    if (foldersToDelete.length === 0) {
+      toast({
+        title: "Cannot Delete",
+        description: "Selected folders contain documents or include protected folders.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Delete folders sequentially to avoid overwhelming the server
+      for (const folder of foldersToDelete) {
+        await onDeleteFolder(folder.id);
+      }
+      
+      setSelectedFolders(new Set());
+      setIsMultiSelectMode(false);
+      
+      toast({
+        title: "Folders Deleted",
+        description: `${foldersToDelete.length} folder(s) have been deleted.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete some folders. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSelectFolder = (folderId: string) => {
+    if (!isMultiSelectMode) return;
+    
+    const newSelected = new Set(selectedFolders);
+    if (newSelected.has(folderId)) {
+      newSelected.delete(folderId);
+    } else {
+      newSelected.add(folderId);
+    }
+    setSelectedFolders(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedFolders.size === folders.length) {
+      setSelectedFolders(new Set());
+    } else {
+      setSelectedFolders(new Set(folders.map(f => f.id)));
+    }
+  };
+
+  const toggleMultiSelectMode = () => {
+    setIsMultiSelectMode(!isMultiSelectMode);
+    setSelectedFolders(new Set());
   };
 
   const handleDragOver = useCallback((e: React.DragEvent, folderId: string) => {
@@ -605,14 +739,62 @@ export default function FolderManager({
           </p>
         </div>
         
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          disabled={isCreating}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <FolderPlus className="w-4 h-4 mr-2" />
-          {isCreating ? 'Creating...' : 'New Folder'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {isMultiSelectMode && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSelectAll}
+                className="text-xs"
+              >
+                {selectedFolders.size === folders.length ? 'Deselect All' : 'Select All'}
+              </Button>
+              
+              {selectedFolders.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  className="text-xs"
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Delete ({selectedFolders.size})
+                </Button>
+              )}
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleMultiSelectMode}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+            </>
+          )}
+          
+          {!isMultiSelectMode && folders.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggleMultiSelectMode}
+              className="text-xs"
+            >
+              <MoreVertical className="w-3 h-3 mr-1" />
+              Manage
+            </Button>
+          )}
+          
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            disabled={isCreating}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <FolderPlus className="w-4 h-4 mr-2" />
+            {isCreating ? 'Creating...' : 'New Folder'}
+          </Button>
+        </div>
       </div>
 
       {/* Folders Grid */}
@@ -661,6 +843,9 @@ export default function FolderManager({
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
+                isMultiSelectMode={isMultiSelectMode}
+                isSelected={selectedFolders.has(folder.id)}
+                onSelect={handleSelectFolder}
               />
             </motion.div>
           ))}

@@ -587,9 +587,18 @@ const ComplianceWorkspace: React.FC = () => {
 
   const renameFolderMutation = useMutation({
     mutationFn: async ({ id, newName }: { id: string; newName: string }) => {
-      // For renaming, we need to update all documents in the folder
-      // This would require a more complex backend endpoint
-      throw new Error('Folder renaming not yet implemented');
+      return apiRequest('PUT', `/api/user-documents/folders/${id}`, { name: newName });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Rename Failed",
+        description: error.message || "Failed to rename folder. Please try again.",
+        variant: "destructive",
+      });
     }
   });
 

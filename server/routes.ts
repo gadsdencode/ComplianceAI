@@ -1199,6 +1199,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const folderName = name.trim();
       
+      // Validate folder name
+      if (folderName.length < 2) {
+        return res.status(400).json({ message: "Folder name must be at least 2 characters" });
+      }
+      
+      if (folderName.length > 50) {
+        return res.status(400).json({ message: "Folder name must be less than 50 characters" });
+      }
+      
+      // Check for invalid characters
+      const invalidChars = /[<>:"/\\|?*]/;
+      if (invalidChars.test(folderName)) {
+        return res.status(400).json({ message: "Folder name contains invalid characters" });
+      }
+      
+      // Check for reserved names
+      const reservedNames = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'];
+      if (reservedNames.includes(folderName.toUpperCase())) {
+        return res.status(400).json({ message: "Folder name is reserved and cannot be used" });
+      }
+      
       // Check if folder already exists for this user
       const existingFolder = await db.execute(sql`
         SELECT COUNT(*) as count 
@@ -1207,7 +1228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `);
       
       if ((existingFolder.rows[0] as any).count > 0) {
-        return res.status(409).json({ message: "Folder already exists" });
+        return res.status(409).json({ message: "A folder with this name already exists" });
       }
       
       // Create a placeholder document to establish the folder in the database
@@ -1252,6 +1273,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rename folder endpoint
+  app.put("/api/user-documents/folders/:folderId", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { folderId } = req.params;
+      const { name } = req.body;
+      
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        return res.status(400).json({ message: "New folder name is required" });
+      }
+      
+      const newFolderName = name.trim();
+      
+      // Validate folder name
+      if (newFolderName.length < 2) {
+        return res.status(400).json({ message: "Folder name must be at least 2 characters" });
+      }
+      
+      if (newFolderName.length > 50) {
+        return res.status(400).json({ message: "Folder name must be less than 50 characters" });
+      }
+      
+      // Check for invalid characters
+      const invalidChars = /[<>:"/\\|?*]/;
+      if (invalidChars.test(newFolderName)) {
+        return res.status(400).json({ message: "Folder name contains invalid characters" });
+      }
+      
+      // Extract current folder name from ID
+      const currentFolderName = folderId.replace(`folder-${req.user.id}-`, '').replace(/-/g, ' ');
+      
+      // Check if new name is the same as current name
+      if (currentFolderName === newFolderName) {
+        return res.status(400).json({ message: "New folder name is the same as current name" });
+      }
+      
+      // Check if a folder with the new name already exists
+      const existingFolder = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} AND category = ${newFolderName}
+      `);
+      
+      if ((existingFolder.rows[0] as any).count > 0) {
+        return res.status(409).json({ message: "A folder with this name already exists" });
+      }
+      
+      // Prevent renaming the default "General" folder
+      if (currentFolderName === 'General') {
+        return res.status(400).json({ message: "Cannot rename the default General folder" });
+      }
+      
+      // Update all documents in the folder to use the new category name
+      const updateResult = await db.execute(sql`
+        UPDATE user_documents 
+        SET category = ${newFolderName}, updated_at = NOW()
+        WHERE user_id = ${req.user.id} AND category = ${currentFolderName}
+      `);
+      
+      // Generate new folder ID
+      const newFolderId = `folder-${req.user.id}-${newFolderName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+      
+      // Get document count for response
+      const documentCount = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} 
+          AND category = ${newFolderName} 
+          AND COALESCE(is_folder_placeholder, false) = false
+      `);
+      
+      res.json({
+        id: newFolderId,
+        name: newFolderName,
+        documentCount: parseInt((documentCount.rows[0] as any).count),
+        createdAt: new Date().toISOString(),
+        isDefault: false,
+        message: "Folder renamed successfully"
+      });
+      
+    } catch (error: any) {
+      console.error("Error renaming folder:", error);
+      res.status(500).json({ message: "Error renaming folder", error: error.message });
+    }
+  });
+
+  // Get folder statistics
+  app.get("/api/user-documents/folders/:folderId/stats", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { folderId } = req.params;
+      
+      // Extract folder name from ID
+      const folderName = folderId.replace(`folder-${req.user.id}-`, '').replace(/-/g, ' ');
+      
+      // Get detailed statistics
+      const stats = await db.execute(sql`
+        SELECT 
+          COUNT(CASE WHEN COALESCE(is_folder_placeholder, false) = false THEN 1 END) as document_count,
+          SUM(CASE WHEN COALESCE(is_folder_placeholder, false) = false THEN file_size ELSE 0 END) as total_size,
+          COUNT(CASE WHEN COALESCE(is_folder_placeholder, false) = false AND starred = true THEN 1 END) as starred_count,
+          MAX(CASE WHEN COALESCE(is_folder_placeholder, false) = false THEN updated_at END) as last_modified
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} AND category = ${folderName}
+      `);
+      
+      const result = stats.rows[0] as any;
+      
+      res.json({
+        folderName,
+        documentCount: parseInt(result.document_count) || 0,
+        totalSize: parseInt(result.total_size) || 0,
+        starredCount: parseInt(result.starred_count) || 0,
+        lastModified: result.last_modified,
+        isEmpty: parseInt(result.document_count) === 0
+      });
+      
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving folder statistics", error: error.message });
+    }
+  });
+
   app.delete("/api/user-documents/folders/:folderId", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -1262,6 +1411,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Extract folder name from ID
       const folderName = folderId.replace(`folder-${req.user.id}-`, '').replace(/-/g, ' ');
+      
+      // Prevent deleting the default "General" folder
+      if (folderName === 'General') {
+        return res.status(400).json({ message: "Cannot delete the default General folder" });
+      }
       
       // Check if folder has real documents (excluding placeholders)
       const documentCount = await db.execute(sql`
