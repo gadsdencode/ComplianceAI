@@ -164,3 +164,31 @@ export interface UserDocument {
   createdAt: string;
   updatedAt: string;
 }
+
+// Bulk upload related types
+export interface BulkUploadFileResult {
+  fileName: string;
+  originalIndex: number;
+  status: 'success' | 'error' | 'pending';
+  document: UserDocument | null;
+  error: string | null;
+}
+
+export interface BulkUploadSummary {
+  total: number;
+  successful: number;
+  failed: number;
+  successRate: number;
+}
+
+export interface BulkUploadResponse {
+  results: BulkUploadFileResult[];
+  summary: BulkUploadSummary;
+}
+
+export interface BulkUploadMetadata {
+  description?: string | null;
+  tags?: string[];
+  folderId?: string;
+  category?: string;
+}

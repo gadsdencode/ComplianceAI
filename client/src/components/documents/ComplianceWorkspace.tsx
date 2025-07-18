@@ -26,7 +26,7 @@ import {
   Plus,
   Upload
 } from "lucide-react";
-import { UserDocument, Document } from '@/types';
+import { UserDocument, Document, BulkUploadResponse } from '@/types';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -679,6 +679,51 @@ const ComplianceWorkspace: React.FC = () => {
     },
   });
 
+  // Bulk upload document mutation
+  const bulkUploadMutation = useMutation({
+    mutationFn: async (data: { files: FileList; metadata: any }): Promise<BulkUploadResponse> => {
+      const { files, metadata } = data;
+      
+      // Create form data for bulk file upload
+      const formData = new FormData();
+      
+      // Append all files with the key 'files'
+      Array.from(files).forEach((file) => {
+        formData.append('files', file);
+      });
+      
+      // Append metadata as JSON string
+      if (metadata) {
+        formData.append('metadata', JSON.stringify(metadata));
+      }
+      
+      const response = await fetch('/api/user-documents/bulk-upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to upload documents');
+      }
+      
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+    },
+    onError: (error: any) => {
+      console.error("Bulk upload mutation error:", error);
+      toast({
+        title: 'Bulk Upload Failed',
+        description: error.message || 'There was an error uploading your documents.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const formatFileSize = (bytes: number) => {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     if (bytes === 0) return '0 B';
@@ -853,6 +898,10 @@ const ComplianceWorkspace: React.FC = () => {
 
   const handleUpload = async (file: File, metadata: any) => {
     uploadMutation.mutate({ file, metadata });
+  };
+
+  const handleBulkUpload = async (files: FileList, metadata: any) => {
+    return await bulkUploadMutation.mutateAsync({ files, metadata });
   };
 
   // Folder management handlers
@@ -1168,8 +1217,11 @@ const ComplianceWorkspace: React.FC = () => {
               <h2 className="text-xl font-semibold text-white mb-4">Upload Document</h2>
               <FileUploader 
                 onFileUpload={handleUpload}
+                onBulkFileUpload={handleBulkUpload}
                 folders={folders?.map(folder => ({ id: folder.id, name: folder.name })) || []}
                 isUploading={uploadMutation.isPending}
+                supportsBulkUpload={true}
+                maxFiles={50}
               />
             </motion.div>
           )}

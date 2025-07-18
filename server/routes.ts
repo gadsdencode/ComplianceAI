@@ -29,10 +29,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Replit Object Storage configuration
+const REPLIT_OBJECT_STORAGE_BUCKET_ID = process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID || 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826';
+
 const upload = multer();
 
 // Environment detection for Replit Object Storage
-const isReplitEnvironment = !!process.env.REPL_ID || !!process.env.REPLIT_DB_URL;
+// Check multiple possible indicators for Replit environment
+const isReplitEnvironment = !!(
+  process.env.REPL_ID || 
+  process.env.REPLIT_DB_URL || 
+  process.env.REPLIT_DEPLOYMENT || 
+  process.env.REPLIT_DOMAINS ||
+  process.env.FORCE_REPLIT_STORAGE === 'true'
+);
 
 // Create appropriate storage client based on environment
 let objectClient: any;
@@ -100,6 +110,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       timestamp: new Date().toISOString(),
       service: "ComplianceAI API"
     });
+  });
+
+  // Environment info endpoint for debugging
+  app.get("/api/environment", (req: Request, res: Response) => {
+    const envInfo = {
+      isReplitEnvironment,
+      nodeEnv: process.env.NODE_ENV,
+      bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID,
+      detectedVariables: {
+        REPL_ID: !!process.env.REPL_ID,
+        REPLIT_DB_URL: !!process.env.REPLIT_DB_URL,
+        REPLIT_DEPLOYMENT: !!process.env.REPLIT_DEPLOYMENT,
+        REPLIT_DOMAINS: !!process.env.REPLIT_DOMAINS,
+        FORCE_REPLIT_STORAGE: process.env.FORCE_REPLIT_STORAGE,
+        REPLIT_OBJECT_STORAGE_BUCKET_ID: !!process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID
+      },
+      storageMode: isReplitEnvironment ? 'real-object-storage' : 'mock-development-storage'
+    };
+    res.json(envInfo);
   });
   
   // Documents API
@@ -1297,6 +1326,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Document not found" });
       }
       
+      console.log(`📥 Download request for document:`, {
+        documentId: document.id,
+        fileName: document.fileName,
+        fileUrl: document.fileUrl,
+        fileSize: document.fileSize
+      });
+      
       // Ensure user can only access their own files
       if (document.userId !== req.user.id) {
         return res.status(403).json({ message: "Forbidden" });
@@ -1308,7 +1344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isReplitEnvironment) {
         // Use real ObjectStorageClient in Replit environment
         storageClient = new ObjectStorageClient({
-          bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+          bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
         });
       } else {
         // Use the same mock client as document attachments for consistency
@@ -1316,13 +1352,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if file exists in storage (EXACTLY like the working document files endpoint)
+      console.log(`🔍 Checking if file exists in object storage: ${document.fileUrl}`);
       const existsResult = await storageClient.exists(document.fileUrl);
+      console.log(`🔍 Object storage exists check result:`, existsResult);
+      
       if (!existsResult.ok) {
+        console.error(`❌ Error checking file existence: ${existsResult.error}`);
         return res.status(500).json({ message: "Error checking file", error: existsResult.error });
       }
       if (!existsResult.value) {
+        console.error(`❌ File not found in object storage: ${document.fileUrl}`);
         return res.status(404).json({ message: "File not found" });
       }
+      
+      console.log(`✅ File found in object storage: ${document.fileUrl}`);
       
       // Create the download stream (EXACTLY like the working endpoint)
       const stream = storageClient.downloadAsStream(document.fileUrl);
@@ -1412,9 +1455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let objectStorage: any;
         
         if (isReplitEnvironment) {
-          console.log("Using real Object Storage client with bucket ID: replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826");
+          console.log(`Using real Object Storage client with bucket ID: ${REPLIT_OBJECT_STORAGE_BUCKET_ID}`);
           objectStorage = new ObjectStorageClient({
-            bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+            bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
           });
         } else {
           console.log("Using development mock storage for file upload");
@@ -1480,7 +1523,276 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-  
+
+  // Bulk upload endpoint for multiple files
+  app.post("/api/user-documents/bulk-upload", async (req: Request & { files?: any, user?: any }, res: Response) => {
+    try {
+      console.log("Bulk upload request received");
+      console.log("Request body:", req.body);
+      console.log("Files object:", req.files ? Object.keys(req.files) : "No files");
+
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Validate files exist
+      if (!req.files) {
+        console.error("No files object in bulk upload request");
+        return res.status(400).json({ message: "No files were uploaded" });
+      }
+      
+      if (!req.files.files) {
+        console.error("No files with key 'files' in request.files");
+        return res.status(400).json({ message: "No files found with key 'files'" });
+      }
+      
+      // Get files array - express-fileupload provides array for multiple files
+      const filesData = req.files.files;
+      const files = Array.isArray(filesData) ? filesData : [filesData];
+      
+      console.log(`Processing ${files.length} files for bulk upload`);
+      
+      // Parse shared metadata with error handling
+      let sharedMetadata: {
+        description?: string | null;
+        tags?: string[];
+        folderId?: string;
+        category?: string;
+      } = {};
+      
+      if (req.body.metadata) {
+        try {
+          sharedMetadata = JSON.parse(req.body.metadata);
+        } catch (error) {
+          console.error("Error parsing shared metadata:", error);
+          console.log("Raw shared metadata received:", req.body.metadata);
+          // Continue with empty metadata instead of failing
+        }
+      }
+      
+      // Extract category from folder ID if provided
+      let category = 'General'; // Default category
+      if (sharedMetadata.folderId) {
+        const folderNamePart = sharedMetadata.folderId.replace(/^folder-\d+-/, '');
+        category = folderNamePart.replace(/-/g, ' ');
+      } else if (sharedMetadata.category) {
+        category = sharedMetadata.category;
+      }
+      
+      // Function to process a single file
+      const processSingleFile = async (file: any, index: number) => {
+        const fileResult = {
+          fileName: file.name || `file_${index}`,
+          originalIndex: index,
+          status: 'pending' as 'success' | 'error' | 'pending',
+          document: null as any,
+          error: null as string | null
+        };
+        
+        try {
+          // Validate file object
+          if (!file.name || !file.mimetype || !file.size) {
+            throw new Error(`Invalid file object at index ${index}`);
+          }
+          
+          // Validate file size (50MB limit from express-fileupload config)
+          if (file.size > 50 * 1024 * 1024) {
+            throw new Error(`File "${file.name}" exceeds 50MB limit`);
+          }
+          
+          console.log(`Processing file ${index + 1}/${files.length}: ${file.name} (${file.size} bytes)`);
+          
+          // Generate unique object name for storage
+          const timestamp = Date.now();
+          const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const objectName = `${req.user.id}/${timestamp}-${index}-${sanitizedFileName}`;
+          
+          // Use appropriate storage client based on environment
+          let objectStorage: any;
+          
+          if (isReplitEnvironment) {
+            objectStorage = new ObjectStorageClient({
+              bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+            });
+          } else {
+            objectStorage = objectClient;
+          }
+          
+          // Upload file to Object Storage
+          const uploadResult = await objectStorage.uploadFromBytes(
+            objectName, 
+            file.data
+          );
+          
+          if (!uploadResult.ok) {
+            throw new Error(`Storage upload failed: ${uploadResult.error}`);
+          }
+          
+          console.log(`✅ File uploaded to object storage: ${objectName}`);
+          
+          // Verify the file was uploaded by checking if it exists
+          const existsCheck = await objectStorage.exists(objectName);
+          if (!existsCheck.ok || !existsCheck.value) {
+            console.error(`❌ File verification failed for: ${objectName}`);
+            throw new Error(`File upload verification failed: ${objectName}`);
+          }
+          
+          console.log(`✅ File existence verified in object storage: ${objectName}`);
+          
+          // Create database record
+          const newDocument = await storage.createUserDocument({
+            userId: req.user.id,
+            title: file.name, // Use original filename as title for bulk uploads
+            description: sharedMetadata.description || null,
+            fileName: file.name,
+            fileType: file.mimetype,
+            fileSize: file.size,
+            fileUrl: objectName, // This is the key field - storing the object storage path
+            tags: Array.isArray(sharedMetadata.tags) ? sharedMetadata.tags : [],
+            category: category,
+          });
+          
+          console.log(`✅ Database record created for file ${index + 1}: ${file.name}`, {
+            documentId: newDocument.id,
+            fileUrl: newDocument.fileUrl,
+            fileName: newDocument.fileName
+          });
+          
+          fileResult.status = 'success';
+          fileResult.document = newDocument;
+          
+        } catch (error: any) {
+          console.error(`Error processing file ${index + 1} (${file.name}):`, error);
+          fileResult.status = 'error';
+          fileResult.error = error.message || 'Unknown error occurred';
+        }
+        
+        return fileResult;
+      };
+      
+      // Process files in batches of 5 for optimal performance
+      const BATCH_SIZE = 5;
+      const results: any[] = [];
+      
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        const batchStartIndex = i;
+        
+        console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(files.length / BATCH_SIZE)} (files ${i + 1}-${Math.min(i + BATCH_SIZE, files.length)})`);
+        
+        // Process batch concurrently using Promise.allSettled to handle individual failures
+        const batchPromises = batch.map((file, batchIndex) => 
+          processSingleFile(file, batchStartIndex + batchIndex)
+        );
+        
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Extract results from Promise.allSettled
+        const batchProcessedResults = batchResults.map((result, batchIndex) => {
+          if (result.status === 'fulfilled') {
+            return result.value;
+          } else {
+            // Handle case where processSingleFile itself threw an error
+            return {
+              fileName: batch[batchIndex]?.name || `file_${batchStartIndex + batchIndex}`,
+              originalIndex: batchStartIndex + batchIndex,
+              status: 'error' as const,
+              document: null,
+              error: result.reason?.message || 'Failed to process file'
+            };
+          }
+        });
+        
+        results.push(...batchProcessedResults);
+        
+        // Log batch completion
+        const batchSuccessful = batchProcessedResults.filter(r => r.status === 'success').length;
+        const batchFailed = batchProcessedResults.filter(r => r.status === 'error').length;
+        console.log(`Batch ${Math.floor(i / BATCH_SIZE) + 1} completed: ${batchSuccessful} successful, ${batchFailed} failed`);
+      }
+      
+      // Calculate summary statistics
+      const successful = results.filter(r => r.status === 'success').length;
+      const failed = results.filter(r => r.status === 'error').length;
+      
+      console.log(`Bulk upload completed: ${successful}/${files.length} files successful`);
+      
+      // Return comprehensive results
+      res.status(201).json({
+        results: results,
+        summary: {
+          total: files.length,
+          successful: successful,
+          failed: failed,
+          successRate: files.length > 0 ? Math.round((successful / files.length) * 100) : 0
+        }
+      });
+      
+    } catch (error: any) {
+      console.error("Bulk upload error:", error);
+      res.status(500).json({ 
+        message: "Error processing bulk upload", 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+    });
+
+  // Diagnostic endpoint to check file storage status
+  app.get("/api/user-documents/:id/storage-status", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      
+      // Get document metadata
+      const document = await storage.getUserDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Ensure user can only access their own files
+      if (document.userId !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Use appropriate storage client based on environment
+      let storageClient: any;
+      
+             if (isReplitEnvironment) {
+         storageClient = new ObjectStorageClient({
+           bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+         });
+      } else {
+        storageClient = objectClient;
+      }
+      
+      // Check if file exists in storage
+      const existsResult = await storageClient.exists(document.fileUrl);
+      
+      const status = {
+        documentId: document.id,
+        fileName: document.fileName,
+        fileUrl: document.fileUrl,
+        fileSize: document.fileSize,
+        createdAt: document.createdAt,
+        storageEnvironment: isReplitEnvironment ? 'production' : 'development',
+        objectStorageExists: existsResult.ok ? existsResult.value : false,
+        objectStorageError: !existsResult.ok ? existsResult.error : null
+      };
+      
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Error checking storage status", 
+        error: error.message 
+      });
+    }
+  });
+
   app.patch("/api/user-documents/:id", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -1533,10 +1845,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           let objectStorage: any;
           
-          if (isReplitEnvironment) {
-            objectStorage = new ObjectStorageClient({
-              bucketId: 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
-            });
+                 if (isReplitEnvironment) {
+         objectStorage = new ObjectStorageClient({
+           bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+         });
           } else {
             objectStorage = objectClient;
           }
