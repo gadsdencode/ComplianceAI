@@ -9,7 +9,7 @@ export interface User {
 }
 
 // Document related types
-export type DocumentStatus = "draft" | "pending_approval" | "active" | "expired" | "archived";
+export type DocumentStatus = "draft" | "pending_approval" | "active" | "expired" | "archived" | "review" | "approved";
 
 export interface Document {
   id: number;
@@ -98,7 +98,8 @@ export interface PendingDocumentItem {
   title: string;
   deadline?: string;
   status: DocumentStatus;
-  actionType: "sign" | "review" | "approve";
+  actionType: "sign" | "review" | "approve" | "complete";
+  isUserDocument?: boolean;
 }
 
 export interface RecentDocumentItem {
@@ -106,6 +107,7 @@ export interface RecentDocumentItem {
   title: string;
   updatedAt: string;
   status: DocumentStatus;
+  isUserDocument?: boolean;
 }
 
 export interface ComplianceCalendarItem {

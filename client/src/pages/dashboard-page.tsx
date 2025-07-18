@@ -30,10 +30,10 @@ export default function DashboardPage() {
     queryKey: ['/api/dashboard/stats'],
   });
 
-  // Fetch documents that need action
+  // Fetch compliance documents that need action
   const {
-    data: pendingDocuments,
-    isLoading: isLoadingPending
+    data: pendingComplianceDocuments,
+    isLoading: isLoadingPendingCompliance
   } = useQuery<PendingDocumentItem[]>({
     queryKey: ['/api/documents', { status: 'pending_approval' }],
     select: (data) => data.map(doc => ({
@@ -46,19 +46,69 @@ export default function DashboardPage() {
     })),
   });
 
-  // Fetch recent documents
+  // Fetch user documents that need action (drafts)
   const {
-    data: recentDocuments,
-    isLoading: isLoadingRecent
+    data: pendingUserDocuments,
+    isLoading: isLoadingPendingUser
+  } = useQuery<any[]>({
+    queryKey: ['/api/user-documents'],
+    select: (data) => data
+      .filter(doc => doc.status === 'draft')
+      .slice(0, 5)
+      .map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        deadline: undefined,
+        status: doc.status,
+        actionType: 'complete',
+        isUserDocument: true
+      })),
+  });
+
+  // Combine pending documents
+  const pendingDocuments = [
+    ...(pendingComplianceDocuments || []),
+    ...(pendingUserDocuments || [])
+  ];
+
+  const isLoadingPending = isLoadingPendingCompliance || isLoadingPendingUser;
+
+  // Fetch recent compliance documents
+  const {
+    data: recentComplianceDocuments,
+    isLoading: isLoadingRecentCompliance
   } = useQuery<RecentDocumentItem[]>({
     queryKey: ['/api/documents'],
-    select: (data) => data.slice(0, 5).map(doc => ({
+    select: (data) => data.slice(0, 3).map(doc => ({
       id: doc.id,
       title: doc.title,
       updatedAt: doc.updatedAt,
       status: doc.status
     })),
   });
+
+  // Fetch recent user documents
+  const {
+    data: recentUserDocuments,
+    isLoading: isLoadingRecentUser
+  } = useQuery<any[]>({
+    queryKey: ['/api/user-documents'],
+    select: (data) => data.slice(0, 2).map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      updatedAt: doc.updatedAt,
+      status: doc.status,
+      isUserDocument: true
+    })),
+  });
+
+  // Combine recent documents
+  const recentDocuments = [
+    ...(recentComplianceDocuments || []),
+    ...(recentUserDocuments || [])
+  ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
+
+  const isLoadingRecent = isLoadingRecentCompliance || isLoadingRecentUser;
 
   // Fetch compliance deadlines
   const {

@@ -1019,18 +1019,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      // Get documents
-      const allDocuments = await storage.listDocuments();
+      // Get compliance documents
+      const allComplianceDocuments = await storage.listDocuments();
       
-      // Filter for user if they're an employee
-      const userDocuments = req.user.role === "employee" 
-        ? allDocuments.filter(doc => doc.createdById === req.user.id)
-        : allDocuments;
+      // Filter compliance documents for user if they're an employee
+      const userComplianceDocuments = req.user.role === "employee" 
+        ? allComplianceDocuments.filter(doc => doc.createdById === req.user.id)
+        : allComplianceDocuments;
       
-      // Get pending documents
-      const pendingDocuments = userDocuments.filter(doc => 
+      // Get user-uploaded documents
+      const userUploadedDocuments = await storage.getUserDocuments(req.user.id);
+      
+      // Combine both types of documents for total count
+      const totalDocuments = userComplianceDocuments.length + userUploadedDocuments.length;
+      
+      // Get pending compliance documents
+      const pendingComplianceDocuments = userComplianceDocuments.filter(doc => 
         doc.status === "pending_approval" || doc.status === "draft"
       );
+      
+      // For user documents, consider "draft" status as pending
+      const pendingUserDocuments = userUploadedDocuments.filter(doc => 
+        doc.status === "draft"
+      );
+      
+      const totalPendingDocuments = pendingComplianceDocuments.length + pendingUserDocuments.length;
       
       // Get upcoming compliance deadlines
       const deadlineOptions: any = { upcoming: true };
@@ -1040,9 +1053,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const upcomingDeadlines = await storage.listComplianceDeadlines(deadlineOptions);
       
-      // Calculate compliance rate - in a real app, this would be more sophisticated
-      const activeDocuments = userDocuments.filter(doc => doc.status === "active");
-      const expiringDocuments = activeDocuments.filter(doc => {
+      // Calculate compliance rate - based on active compliance documents and approved user documents
+      const activeComplianceDocuments = userComplianceDocuments.filter(doc => doc.status === "active");
+      const activeUserDocuments = userUploadedDocuments.filter(doc => doc.status === "approved");
+      const totalActiveDocuments = activeComplianceDocuments.length + activeUserDocuments.length;
+      
+      const expiringDocuments = activeComplianceDocuments.filter(doc => {
         if (!doc.expiresAt) return false;
         
         const now = new Date();
@@ -1054,37 +1070,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Calculate compliance rate based on document statuses
-      const totalRelevantDocs = userDocuments.length > 0 ? userDocuments.length : 1; // Avoid div by zero
-      const compliantDocs = activeDocuments.length;
-      const complianceRate = Math.round((compliantDocs / totalRelevantDocs) * 100);
+      const totalRelevantDocs = totalDocuments > 0 ? totalDocuments : 1; // Avoid div by zero
+      const complianceRate = Math.round((totalActiveDocuments / totalRelevantDocs) * 100);
       
       // Get stats from last month
       const lastMonth = new Date();
       lastMonth.setMonth(lastMonth.getMonth() - 1);
       
-      const docsCreatedLastMonth = userDocuments.filter(doc => {
+      const complianceDocsCreatedLastMonth = userComplianceDocuments.filter(doc => {
         const createdAt = new Date(doc.createdAt);
         return createdAt >= lastMonth;
       }).length;
       
+      const userDocsCreatedLastMonth = userUploadedDocuments.filter(doc => {
+        const createdAt = new Date(doc.createdAt);
+        return createdAt >= lastMonth;
+      }).length;
+      
+      const totalDocsCreatedLastMonth = complianceDocsCreatedLastMonth + userDocsCreatedLastMonth;
+      
+      // Calculate urgent documents
+      const urgentComplianceDocuments = pendingComplianceDocuments.filter(doc => {
+        if (!doc.expiresAt) return false;
+        
+        const now = new Date();
+        const expiresDate = new Date(doc.expiresAt);
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(now.getDate() + 3);
+        
+        return expiresDate <= threeDaysFromNow;
+      }).length;
+      
+      // For user documents, consider recently uploaded drafts as potentially urgent
+      const urgentUserDocuments = pendingUserDocuments.filter(doc => {
+        const createdAt = new Date(doc.createdAt);
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        
+        return createdAt <= threeDaysAgo; // Draft for more than 3 days
+      }).length;
+      
+      const totalUrgentDocuments = urgentComplianceDocuments + urgentUserDocuments;
+      
       // Create stats object
       const stats = {
-        documents: userDocuments.length,
-        pending: pendingDocuments.length,
+        documents: totalDocuments,
+        pending: totalPendingDocuments,
         complianceRate: complianceRate,
         expiringCount: expiringDocuments.length,
-        docsCreatedLastMonth,
-        urgentCount: pendingDocuments.filter(doc => {
-          if (!doc.expiresAt) return false;
-          
-          const now = new Date();
-          const expiresDate = new Date(doc.expiresAt);
-          const threeDaysFromNow = new Date();
-          threeDaysFromNow.setDate(now.getDate() + 3);
-          
-          return expiresDate <= threeDaysFromNow;
-        }).length,
-        lastMonthComplianceChange: "+2%" // In a real app, this would be calculated
+        docsCreatedLastMonth: totalDocsCreatedLastMonth,
+        urgentCount: totalUrgentDocuments,
+        lastMonthComplianceChange: "+2%", // In a real app, this would be calculated
+        // Additional breakdown for debugging/transparency
+        breakdown: {
+          complianceDocuments: userComplianceDocuments.length,
+          userDocuments: userUploadedDocuments.length,
+          pendingCompliance: pendingComplianceDocuments.length,
+          pendingUser: pendingUserDocuments.length,
+          activeCompliance: activeComplianceDocuments.length,
+          activeUser: activeUserDocuments.length
+        }
       };
       
       res.json(stats);

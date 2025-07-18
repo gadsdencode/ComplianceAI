@@ -124,6 +124,15 @@ export default function DocumentsSection({
     navigate('/document-repository');
   };
 
+  // Handle document click - different navigation for user vs compliance documents
+  const handleDocumentClick = (doc: any) => {
+    if (doc.isUserDocument) {
+      navigate('/document-repository'); // Navigate to document management workspace
+    } else {
+      navigate(`/documents/${doc.id}`); // Navigate to compliance document detail
+    }
+  };
+
   return (
     <section className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Pending Action Documents */}
@@ -195,11 +204,16 @@ export default function DocumentsSection({
             </thead>
             <tbody className="divide-y divide-slate-200">
               {recentDocuments.map((doc) => (
-                <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/document-repository/${doc.id}`)}>
+                <tr key={`${doc.isUserDocument ? 'user' : 'compliance'}-${doc.id}`} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleDocumentClick(doc)}>
                   <td className="px-3 py-3 whitespace-nowrap">
                     <div className="flex items-center">
                       <FileText className="text-slate-400 mr-2 text-lg" size={18} />
                       <span className="text-sm font-medium text-slate-700">{doc.title}</span>
+                      {doc.isUserDocument && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          User Doc
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-slate-500">
