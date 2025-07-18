@@ -790,14 +790,22 @@ const ComplianceWorkspace: React.FC = () => {
   const transformToFileNodes = (): FileNode[] => {
     if (!userDocuments && !complianceDocuments) return [];
 
+    console.log('🔄 Transforming documents to file nodes:', {
+      userDocuments: userDocuments?.length || 0,
+      complianceDocuments: complianceDocuments?.length || 0,
+      folders: folders?.length || 0
+    });
+
     const folderNodes: Record<string, FileNode> = {};
     const allDocuments = [
       ...(userDocuments || []).map(doc => ({ ...doc, type: 'user' as const })),
       ...(complianceDocuments || []).map(doc => ({ ...doc, type: 'compliance' as const }))
     ];
 
-    // Only create managed folders if they are actually loaded
+    // Create managed folders from API response
     if (folders && Array.isArray(folders)) {
+      console.log('📁 Creating managed folders:', folders.map(f => ({ id: f.id, name: f.name })));
+      
       folders.forEach(folder => {
         folderNodes[folder.id] = {
           id: `managed-folder-${folder.id}`,
@@ -806,19 +814,42 @@ const ComplianceWorkspace: React.FC = () => {
           children: [],
           modified: formatDate(folder.createdAt || new Date().toISOString()),
           folderId: folder.id, // Store original folder ID for operations
-          documentCount: folder.documentCount || 0,
+          documentCount: 0, // We'll count as we add documents
           isManaged: true // Flag to distinguish from category folders
         };
       });
     }
 
-    // Then, process documents and assign them to managed folders based on their category
+    // Ensure "General" folder always exists
+    if (!Object.values(folderNodes).find(folder => folder.name === 'General')) {
+      console.log('📁 Creating default General folder');
+      const generalFolderId = 'general-default';
+      folderNodes[generalFolderId] = {
+        id: `managed-folder-${generalFolderId}`,
+        name: 'General',
+        type: "folder",
+        children: [],
+        modified: formatDate(new Date().toISOString()),
+        folderId: generalFolderId,
+        documentCount: 0,
+        isManaged: true
+      };
+    }
+
+    // Process documents and assign them to managed folders
     allDocuments.forEach(doc => {
       const category = ('category' in doc ? doc.category : 'Compliance') || 'General';
       
-      // Find the managed folder that matches this document's category
+      console.log('📄 Processing document:', {
+        id: doc.id,
+        title: doc.title,
+        category: category,
+        type: doc.type
+      });
+      
+      // Find the managed folder that matches this document's category (case-insensitive)
       const matchingManagedFolder = Object.values(folderNodes).find(folder => 
-        folder.isManaged && folder.name === category
+        folder.isManaged && folder.name.toLowerCase() === category.toLowerCase()
       );
       
       const fileNode: FileNode = {
@@ -835,23 +866,33 @@ const ComplianceWorkspace: React.FC = () => {
 
       if (matchingManagedFolder) {
         // Add to the matching managed folder
+        console.log(`✅ Adding document "${doc.title}" to folder "${matchingManagedFolder.name}"`);
         matchingManagedFolder.children!.push(fileNode);
-        // Note: documentCount is already set from the API response, no need to increment
+        matchingManagedFolder.documentCount = (matchingManagedFolder.documentCount || 0) + 1;
       } else {
-        // If no managed folder exists for this category, find or create a "General" folder
-        let generalFolder = Object.values(folderNodes).find(folder => 
+        // If no managed folder exists for this category, add to General folder
+        const generalFolder = Object.values(folderNodes).find(folder => 
           folder.isManaged && folder.name === 'General'
         );
         
         if (generalFolder) {
+          console.log(`⚠️ No folder found for category "${category}", adding document "${doc.title}" to General folder`);
           generalFolder.children!.push(fileNode);
+          generalFolder.documentCount = (generalFolder.documentCount || 0) + 1;
+        } else {
+          console.error(`❌ No General folder found for document "${doc.title}" with category "${category}"`);
         }
-        // If no General folder exists either, the document won't be shown
-        // This encourages users to create proper folders for organization
       }
     });
 
-    return Object.values(folderNodes);
+    const result = Object.values(folderNodes);
+    console.log('📋 Final folder structure:', result.map(folder => ({
+      name: folder.name,
+      documentCount: folder.children?.length || 0,
+      isManaged: folder.isManaged
+    })));
+
+    return result;
   };
 
   const fileNodes = transformToFileNodes();
@@ -1050,7 +1091,12 @@ const ComplianceWorkspace: React.FC = () => {
         folder.folderId === targetFolderId ||
         folder.id === `managed-folder-${targetFolderId}`
       );
-      const targetFolderName = targetFolder?.name || 'folder';
+      
+      if (!targetFolder) {
+        throw new Error('Target folder not found');
+      }
+      
+      const targetFolderName = targetFolder.name;
       
       // Determine if we're moving a document or a folder
       const sourceNode = fileNodes.flatMap(folder => [folder, ...(folder.children || [])])
@@ -1062,6 +1108,16 @@ const ComplianceWorkspace: React.FC = () => {
       
       const isMovingFolder = sourceNode.type === 'folder';
       const itemName = sourceNode.name;
+      
+      console.log('🔄 Move operation details:', {
+        itemId,
+        targetFolderId,
+        targetFolderName,
+        sourceNodeId,
+        isMovingFolder,
+        itemName,
+        sourceDocument: sourceNode.document
+      });
       
       // For managed folders, use actual API calls
       if (targetFolder?.isManaged) {
@@ -1089,8 +1145,17 @@ const ComplianceWorkspace: React.FC = () => {
               description: `Moving "${itemName}" to ${targetFolderName}...`,
             });
             
+            // Extract the actual document ID from the node ID format: "user-123" -> 123
+            const actualDocumentId = sourceNode.document.id;
+            
+            console.log('📝 Making API call to update document category:', {
+              documentId: actualDocumentId,
+              newCategory: targetFolderName,
+              currentCategory: sourceNode.document.category
+            });
+            
             // Make the API call to update the document's category
-            const response = await apiRequest('PATCH', `/api/user-documents/${itemId}`, { 
+            const response = await apiRequest('PATCH', `/api/user-documents/${actualDocumentId}`, { 
               category: targetFolderName 
             });
             
