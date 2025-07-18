@@ -2121,22 +2121,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const documentId = parseInt(req.params.id);
       
+      console.log(`📝 Updating user document ${documentId}:`, {
+        userId: req.user.id,
+        updateData: req.body
+      });
+      
+      // Validate document ID
+      if (isNaN(documentId)) {
+        return res.status(400).json({ message: "Invalid document ID" });
+      }
+      
       // Check if document exists and belongs to user
       const document = await storage.getUserDocument(documentId);
       
       if (!document) {
+        console.log(`❌ Document ${documentId} not found`);
         return res.status(404).json({ message: "Document not found" });
       }
       
       if (document.userId !== req.user.id) {
+        console.log(`❌ User ${req.user.id} attempting to access document owned by ${document.userId}`);
         return res.status(403).json({ message: "Forbidden" });
       }
+      
+      console.log(`✅ Document found, proceeding with update:`, {
+        currentCategory: document.category,
+        newCategory: req.body.category
+      });
       
       // Update the document
       const updatedDocument = await storage.updateUserDocument(documentId, req.body);
       
+      if (!updatedDocument) {
+        console.log(`❌ Update failed for document ${documentId}`);
+        return res.status(500).json({ message: "Failed to update document" });
+      }
+      
+      console.log(`✅ Document ${documentId} updated successfully:`, {
+        previousCategory: document.category,
+        newCategory: updatedDocument.category,
+        updatedFields: Object.keys(req.body)
+      });
+      
       res.status(200).json(updatedDocument);
     } catch (error: any) {
+      console.error(`❌ Error updating user document:`, error);
       res.status(500).json({ message: "Error updating document", error: error.message });
     }
   });

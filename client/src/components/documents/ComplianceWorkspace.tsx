@@ -1076,37 +1076,77 @@ const ComplianceWorkspace: React.FC = () => {
           return;
         } else if (!isMovingFolder && sourceNode.document && 'userId' in sourceNode.document) {
           // Moving a user document to a managed folder
+          console.log('🔄 Moving document to folder:', { 
+            documentId: itemId, 
+            targetCategory: targetFolderName,
+            sourceDocument: sourceNode.document 
+          });
+          
           try {
-            await apiRequest('PATCH', `/api/user-documents/${itemId}`, { 
+            // Show loading state
+            toast({
+              title: "Moving Document",
+              description: `Moving "${itemName}" to ${targetFolderName}...`,
+            });
+            
+            // Make the API call to update the document's category
+            const response = await apiRequest('PATCH', `/api/user-documents/${itemId}`, { 
               category: targetFolderName 
             });
             
-            // Refresh data
-            queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+            console.log('✅ Document move API response:', response);
+            
+            // Refresh data to reflect changes
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] }),
+              queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] })
+            ]);
+            
+            // Success feedback
+            toast({
+              title: "Document Moved Successfully",
+              description: `"${itemName}" has been moved to ${targetFolderName}.`,
+            });
+            
+            console.log('✅ Document move completed successfully');
+            return;
+            
+          } catch (apiError: any) {
+            console.error('❌ API error moving document:', apiError);
+            
+            // Parse error message for better user feedback
+            let errorMessage = 'Failed to move document to folder';
+            if (apiError?.response?.data?.message) {
+              errorMessage = apiError.response.data.message;
+            } else if (apiError?.message) {
+              errorMessage = apiError.message;
+            }
             
             toast({
-              title: "Document Moved",
-              description: `${itemName} has been moved to ${targetFolderName}.`,
+              title: "Failed to Move Document",
+              description: errorMessage,
+              variant: "destructive",
             });
-            return;
-          } catch (apiError) {
-            throw new Error('Failed to move document to folder');
+            
+            throw new Error(errorMessage);
           }
         }
       }
       
-      // For category folders or other operations, show success toast
-      // (these are visual operations for now)
+      // For unmanaged folders or other operations
+      console.log('⚠️ Non-managed folder operation - changes may not persist');
       toast({
-        title: `${isMovingFolder ? 'Folder' : 'Document'} Moved`,
-        description: `${itemName} has been moved to ${targetFolderName}.`,
+        title: `${isMovingFolder ? 'Folder' : 'Document'} Moved (UI Only)`,
+        description: `${itemName} moved to ${targetFolderName}. Note: This change may not persist.`,
+        variant: "destructive",
       });
       
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    } catch (error: any) {
+      console.error('❌ Error in handleMoveToFolder:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       toast({
-        title: "Error",
+        title: "Move Operation Failed",
         description: `Failed to move item: ${errorMessage}`,
         variant: "destructive",
       });
