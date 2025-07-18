@@ -1159,6 +1159,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
+      // Ensure "General" folder exists for this user
+      const generalFolderCheck = await db.execute(sql`
+        SELECT COUNT(*) as count 
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} AND category = 'General'
+      `);
+      
+      if ((generalFolderCheck.rows[0] as any).count === 0) {
+        // Create General folder placeholder
+        await db.execute(sql`
+          INSERT INTO user_documents (
+            user_id, 
+            title, 
+            description, 
+            file_name,
+            file_type,
+            file_size,
+            file_url,
+            category, 
+            status,
+            is_folder_placeholder
+          ) VALUES (
+            ${req.user.id},
+            '__FOLDER_PLACEHOLDER__',
+            'Folder placeholder - do not display',
+            '__folder_placeholder__',
+            'application/folder',
+            0,
+            '',
+            'General',
+            'draft',
+            true
+          )
+        `);
+      }
+      
       // Get all unique categories for the user and count real documents (exclude placeholders)
       const result = await db.execute(sql`
         SELECT 
@@ -1359,6 +1395,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error renaming folder:", error);
       res.status(500).json({ message: "Error renaming folder", error: error.message });
+    }
+  });
+
+  // Cleanup duplicate folders (remove unmanaged category folders)
+  app.post("/api/user-documents/folders/cleanup", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      // This endpoint helps clean up any duplicate folders that may exist
+      // It doesn't delete any real documents, just ensures folder structure is clean
+      
+      // Get all categories that have placeholder folders (managed folders)
+      const managedCategories = await db.execute(sql`
+        SELECT DISTINCT category 
+        FROM user_documents 
+        WHERE user_id = ${req.user.id} AND is_folder_placeholder = true
+      `);
+      
+      const managedCategoryNames = managedCategories.rows.map((row: any) => row.category);
+      
+      // For any documents that don't have a matching managed folder, move them to General
+      if (managedCategoryNames.length > 0) {
+        await db.execute(sql`
+          UPDATE user_documents 
+          SET category = 'General'
+          WHERE user_id = ${req.user.id} 
+            AND category NOT IN (${managedCategoryNames.join(',')})
+            AND is_folder_placeholder = false
+        `);
+      }
+      
+      res.json({ 
+        message: "Folder cleanup completed",
+        managedFolders: managedCategoryNames.length
+      });
+      
+    } catch (error: any) {
+      res.status(500).json({ message: "Error during folder cleanup", error: error.message });
     }
   });
 

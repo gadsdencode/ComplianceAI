@@ -488,6 +488,26 @@ const ComplianceWorkspace: React.FC = () => {
     queryKey: ['/api/user-documents/folders'],
   });
 
+  // Cleanup duplicate folders on component mount
+  useEffect(() => {
+    const cleanupFolders = async () => {
+      try {
+        await apiRequest('POST', '/api/user-documents/folders/cleanup');
+        // Refresh folder list after cleanup
+        queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      } catch (error) {
+        console.log('Folder cleanup skipped:', error);
+        // Don't show error to user as this is a background cleanup
+      }
+    };
+
+    // Only run cleanup once when folders are first loaded
+    if (folders && folders.length > 0) {
+      cleanupFolders();
+    }
+  }, [folders?.length]); // Only trigger when folder count changes
+
   // Star document mutation
   const starDocumentMutation = useMutation({
     mutationFn: async ({ documentId, starred }: { documentId: number; starred: boolean }) => {
@@ -792,56 +812,42 @@ const ComplianceWorkspace: React.FC = () => {
       });
     }
 
-    // Then, process documents and create category folders as needed
+    // Then, process documents and assign them to managed folders based on their category
     allDocuments.forEach(doc => {
       const category = ('category' in doc ? doc.category : 'Compliance') || 'General';
-      const documentFolderId = 'folderId' in doc ? doc.folderId : null;
       
-      // If document has a folderId, assign it to that managed folder
-      if (documentFolderId && folderNodes[`managed-folder-${documentFolderId}`]) {
-        const targetFolder = folderNodes[`managed-folder-${documentFolderId}`];
-        
-        const fileNode: FileNode = {
-          id: `${doc.type}-${doc.id}`,
-          name: doc.title,
-          type: "file",
-          size: 'fileSize' in doc ? formatFileSize(doc.fileSize) : undefined,
-          modified: formatDate(doc.updatedAt || doc.createdAt),
-          status: doc.status as any,
-          tags: 'tags' in doc ? doc.tags : undefined,
-          starred: 'starred' in doc ? doc.starred : starredComplianceDocs.has(doc.id),
-          document: doc
-        };
+      // Find the managed folder that matches this document's category
+      const matchingManagedFolder = Object.values(folderNodes).find(folder => 
+        folder.isManaged && folder.name === category
+      );
+      
+      const fileNode: FileNode = {
+        id: `${doc.type}-${doc.id}`,
+        name: doc.title,
+        type: "file",
+        size: 'fileSize' in doc ? formatFileSize(doc.fileSize) : undefined,
+        modified: formatDate(doc.updatedAt || doc.createdAt),
+        status: doc.status as any,
+        tags: 'tags' in doc ? doc.tags : undefined,
+        starred: 'starred' in doc ? doc.starred : starredComplianceDocs.has(doc.id),
+        document: doc
+      };
 
-        targetFolder.children!.push(fileNode);
-        targetFolder.documentCount = (targetFolder.documentCount || 0) + 1;
+      if (matchingManagedFolder) {
+        // Add to the matching managed folder
+        matchingManagedFolder.children!.push(fileNode);
+        // Note: documentCount is already set from the API response, no need to increment
       } else {
-        // Otherwise, create/use category folder
-        const categoryFolderId = `category-folder-${category}`;
+        // If no managed folder exists for this category, find or create a "General" folder
+        let generalFolder = Object.values(folderNodes).find(folder => 
+          folder.isManaged && folder.name === 'General'
+        );
         
-        if (!folderNodes[categoryFolderId]) {
-          folderNodes[categoryFolderId] = {
-            id: categoryFolderId,
-            name: category,
-            type: "folder",
-            children: [],
-            isManaged: false // Category folder, not managed
-          };
+        if (generalFolder) {
+          generalFolder.children!.push(fileNode);
         }
-
-        const fileNode: FileNode = {
-          id: `${doc.type}-${doc.id}`,
-          name: doc.title,
-          type: "file",
-          size: 'fileSize' in doc ? formatFileSize(doc.fileSize) : undefined,
-          modified: formatDate(doc.updatedAt || doc.createdAt),
-          status: doc.status as any,
-          tags: 'tags' in doc ? doc.tags : undefined,
-          starred: 'starred' in doc ? doc.starred : starredComplianceDocs.has(doc.id),
-          document: doc
-        };
-
-        folderNodes[categoryFolderId].children!.push(fileNode);
+        // If no General folder exists either, the document won't be shown
+        // This encourages users to create proper folders for organization
       }
     });
 
