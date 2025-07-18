@@ -14,7 +14,8 @@ import {
   FolderOpen,
   CheckSquare,
   Square,
-  MoreVertical
+  MoreVertical,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +47,17 @@ interface CreateFolderModalProps {
   onClose: () => void;
   onSave: (name: string) => void;
   isSaving?: boolean;
+}
+
+interface DeleteConfirmationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  folderName: string;
+  documentCount: number;
+  isDeleting?: boolean;
+  isBulk?: boolean;
+  bulkCount?: number;
 }
 
 const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
@@ -142,6 +154,89 @@ const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
               className="bg-blue-600 hover:bg-blue-700"
             >
               {isSaving ? 'Creating...' : 'Create Folder'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  folderName,
+  documentCount,
+  isDeleting = false,
+  isBulk = false,
+  bulkCount = 0
+}) => {
+  const handleConfirm = () => {
+    if (!isDeleting) {
+      onConfirm();
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <AlertTriangle className="w-5 h-5" />
+            {isBulk ? `Delete ${bulkCount} Folders?` : `Delete "${folderName}"?`}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div className="space-y-3">
+            {isBulk ? (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800 font-medium">
+                  ⚠️ This action will permanently delete {bulkCount} folders and all their contents.
+                </p>
+                <p className="text-sm text-red-700 mt-2">
+                  Total documents that will be deleted: {documentCount}
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800 font-medium">
+                  ⚠️ This action cannot be undone.
+                </p>
+                <p className="text-sm text-red-700 mt-2">
+                  The folder "{folderName}" and all {documentCount} document{documentCount !== 1 ? 's' : ''} inside will be permanently deleted.
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <p className="text-sm text-gray-600">
+                This will delete:
+              </p>
+              <ul className="text-sm text-gray-700 space-y-1 ml-4">
+                <li>• {isBulk ? `${bulkCount} folders` : `The "${folderName}" folder`}</li>
+                <li>• {documentCount} document{documentCount !== 1 ? 's' : ''} and their file{documentCount !== 1 ? 's' : ''}</li>
+                <li>• All file content from storage</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirm}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : `Delete ${isBulk ? 'Folders' : 'Folder'}`}
             </Button>
           </div>
         </div>
@@ -490,6 +585,22 @@ export default function FolderManager({
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    folderId: string;
+    folderName: string;
+    documentCount: number;
+    isBulk: boolean;
+    bulkFolders: string[];
+  }>({
+    isOpen: false,
+    folderId: '',
+    folderName: '',
+    documentCount: 0,
+    isBulk: false,
+    bulkFolders: []
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   // Add global drag end handler to ensure overlay clears when drag ends
@@ -544,27 +655,60 @@ export default function FolderManager({
     const folder = folders.find(f => f.id === id);
     if (!folder) return;
 
-    if (folder.documentCount > 0) {
-      toast({
-        title: "Cannot Delete Folder",
-        description: "Please move or delete all documents in this folder first.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Show confirmation modal
+    setDeleteConfirmation({
+      isOpen: true,
+      folderId: id,
+      folderName: folder.name,
+      documentCount: folder.documentCount,
+      isBulk: false,
+      bulkFolders: []
+    });
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmation.folderId) return;
+
+    setIsDeleting(true);
     try {
-      await onDeleteFolder(id);
+      // Call delete with force=true to bypass backend confirmation
+      const response = await fetch(`/api/user-documents/folders/${deleteConfirmation.folderId}?force=true`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete folder');
+      }
+
+      const result = await response.json();
+      
+      // Close modal and reset state
+      setDeleteConfirmation({
+        isOpen: false,
+        folderId: '',
+        folderName: '',
+        documentCount: 0,
+        isBulk: false,
+        bulkFolders: []
+      });
+
+      // Invalidate queries to refresh data
+      await onDeleteFolder(deleteConfirmation.folderId);
+
       toast({
         title: "Folder Deleted",
-        description: `Folder "${folder.name}" has been deleted.`,
+        description: `Folder "${deleteConfirmation.folderName}" and ${result.deletedDocuments || 0} document(s) have been deleted.`,
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to delete folder. Please try again.",
+        description: error.message || "Failed to delete folder. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -572,30 +716,74 @@ export default function FolderManager({
     if (selectedFolders.size === 0) return;
 
     const foldersToDelete = folders.filter(f => 
-      selectedFolders.has(f.id) && !f.isDefault && f.documentCount === 0
+      selectedFolders.has(f.id) && !f.isDefault
     );
 
     if (foldersToDelete.length === 0) {
       toast({
         title: "Cannot Delete",
-        description: "Selected folders contain documents or include protected folders.",
+        description: "No valid folders selected for deletion.",
         variant: "destructive",
       });
       return;
     }
 
+    const totalDocuments = foldersToDelete.reduce((sum, folder) => sum + folder.documentCount, 0);
+
+    // Show confirmation modal for bulk delete
+    setDeleteConfirmation({
+      isOpen: true,
+      folderId: '', // Not used for bulk
+      folderName: '', // Not used for bulk
+      documentCount: totalDocuments,
+      isBulk: true,
+      bulkFolders: foldersToDelete.map(f => f.id)
+    });
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (deleteConfirmation.bulkFolders.length === 0) return;
+
+    setIsDeleting(true);
+    let deletedCount = 0;
+    let totalDocumentsDeleted = 0;
+
     try {
       // Delete folders sequentially to avoid overwhelming the server
-      for (const folder of foldersToDelete) {
-        await onDeleteFolder(folder.id);
+      for (const folderId of deleteConfirmation.bulkFolders) {
+        try {
+          const response = await fetch(`/api/user-documents/folders/${folderId}?force=true`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            deletedCount++;
+            totalDocumentsDeleted += result.deletedDocuments || 0;
+            // Also call the parent onDeleteFolder for cache invalidation
+            await onDeleteFolder(folderId);
+          }
+        } catch (error) {
+          console.error(`Failed to delete folder ${folderId}:`, error);
+        }
       }
       
+      // Close modal and reset state
+      setDeleteConfirmation({
+        isOpen: false,
+        folderId: '',
+        folderName: '',
+        documentCount: 0,
+        isBulk: false,
+        bulkFolders: []
+      });
       setSelectedFolders(new Set());
       setIsMultiSelectMode(false);
       
       toast({
         title: "Folders Deleted",
-        description: `${foldersToDelete.length} folder(s) have been deleted.`,
+        description: `${deletedCount} folder(s) and ${totalDocumentsDeleted} document(s) have been deleted.`,
       });
     } catch (error) {
       toast({
@@ -603,6 +791,8 @@ export default function FolderManager({
         description: "Failed to delete some folders. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -907,6 +1097,17 @@ export default function FolderManager({
         onClose={() => setShowCreateModal(false)}
         onSave={handleCreateFolder}
         isSaving={isCreating}
+      />
+
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmation.isOpen}
+        onClose={() => setDeleteConfirmation(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={deleteConfirmation.isBulk ? handleConfirmBulkDelete : handleConfirmDelete}
+        folderName={deleteConfirmation.folderName}
+        documentCount={deleteConfirmation.documentCount}
+        isDeleting={isDeleting}
+        isBulk={deleteConfirmation.isBulk}
+        bulkCount={deleteConfirmation.bulkFolders.length}
       />
     </div>
   );

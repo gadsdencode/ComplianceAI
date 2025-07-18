@@ -1408,6 +1408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const { folderId } = req.params;
+      const { force } = req.query; // Optional force parameter for confirmed deletions
       
       // Extract folder name from ID
       const folderName = folderId.replace(`folder-${req.user.id}-`, '').replace(/-/g, ' ');
@@ -1417,17 +1418,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Cannot delete the default General folder" });
       }
       
-      // Check if folder has real documents (excluding placeholders)
-      const documentCount = await db.execute(sql`
-        SELECT COUNT(*) as count 
+      // Get document count and details
+      const documentsResult = await db.execute(sql`
+        SELECT 
+          id,
+          file_url,
+          file_name,
+          COALESCE(is_folder_placeholder, false) as is_placeholder
         FROM user_documents 
-        WHERE user_id = ${req.user.id} 
-          AND category = ${folderName} 
-          AND COALESCE(is_folder_placeholder, false) = false
+        WHERE user_id = ${req.user.id} AND category = ${folderName}
       `);
       
-      if ((documentCount.rows[0] as any).count > 0) {
-        return res.status(400).json({ message: "Cannot delete folder with documents" });
+      const documents = documentsResult.rows as any[];
+      const realDocuments = documents.filter(doc => !doc.is_placeholder);
+      
+      // If folder has documents and force=true is not specified, return confirmation requirement
+      if (realDocuments.length > 0 && force !== 'true') {
+        return res.status(409).json({ 
+          message: "Folder contains documents",
+          requiresConfirmation: true,
+          documentCount: realDocuments.length,
+          folderName: folderName
+        });
+      }
+      
+      // Delete files from object storage for real documents
+      if (realDocuments.length > 0) {
+        let objectStorage: any;
+        
+        if (isReplitEnvironment) {
+          objectStorage = new ObjectStorageClient({
+            bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+          });
+        } else {
+          objectStorage = objectClient;
+        }
+        
+        // Delete files from object storage (best effort)
+        for (const doc of realDocuments) {
+          if (doc.file_url) {
+            try {
+              await objectStorage.delete(doc.file_url);
+              console.log(`🗑️ Deleted file from storage: ${doc.file_url}`);
+            } catch (storageError) {
+              console.error(`⚠️ Failed to delete file from storage: ${doc.file_url}`, storageError);
+              // Continue with database deletion even if storage deletion fails
+            }
+          }
+        }
       }
       
       // Delete all documents in this category (including placeholders)
@@ -1436,8 +1474,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         WHERE user_id = ${req.user.id} AND category = ${folderName}
       `);
       
-      res.status(200).json({ message: "Folder deleted successfully" });
+      const deletedCount = realDocuments.length;
+      res.status(200).json({ 
+        message: "Folder deleted successfully",
+        deletedDocuments: deletedCount,
+        folderName: folderName
+      });
+      
     } catch (error: any) {
+      console.error("Error deleting folder:", error);
       res.status(500).json({ message: "Error deleting folder", error: error.message });
     }
   });

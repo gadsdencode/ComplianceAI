@@ -604,7 +604,13 @@ const ComplianceWorkspace: React.FC = () => {
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest('DELETE', `/api/user-documents/folders/${id}`);
+      // First try without force to check if confirmation is needed
+      try {
+        return await apiRequest('DELETE', `/api/user-documents/folders/${id}`);
+      } catch (error: any) {
+        // If the error indicates confirmation is needed, the FolderManager will handle it
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
