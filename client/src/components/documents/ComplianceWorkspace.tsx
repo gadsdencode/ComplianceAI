@@ -474,7 +474,7 @@ const ComplianceWorkspace: React.FC = () => {
   }, []);
 
   // Fetch user documents
-  const { data: userDocuments, isLoading: isLoadingUserDocs } = useQuery<UserDocument[]>({
+  const { data: userDocuments, isLoading: isLoadingUserDocs, dataUpdatedAt: userDocsUpdatedAt } = useQuery<UserDocument[]>({
     queryKey: ['/api/user-documents'],
   });
 
@@ -484,9 +484,41 @@ const ComplianceWorkspace: React.FC = () => {
   });
 
   // Fetch user document folders
-  const { data: folders, isLoading: isLoadingFolders } = useQuery<any[]>({
+  const { data: folders, isLoading: isLoadingFolders, dataUpdatedAt: foldersUpdatedAt } = useQuery<any[]>({
     queryKey: ['/api/user-documents/folders'],
   });
+
+  // Debug logging for data changes
+  useEffect(() => {
+    if (userDocuments) {
+      console.log('🔄 USER DOCUMENTS UPDATED:', {
+        count: userDocuments.length,
+        timestamp: new Date().toISOString(),
+        dataUpdatedAt: userDocsUpdatedAt,
+        documents: userDocuments.map(doc => ({
+          id: doc.id,
+          title: doc.title,
+          category: doc.category,
+          updatedAt: doc.updatedAt
+        }))
+      });
+    }
+  }, [userDocuments, userDocsUpdatedAt]);
+
+  useEffect(() => {
+    if (folders) {
+      console.log('🔄 FOLDERS UPDATED:', {
+        count: folders.length,
+        timestamp: new Date().toISOString(),
+        dataUpdatedAt: foldersUpdatedAt,
+        folders: folders.map(f => ({
+          id: f.id,
+          name: f.name,
+          createdAt: f.createdAt
+        }))
+      });
+    }
+  }, [folders, foldersUpdatedAt]);
 
   // Cleanup duplicate folders on component mount
   useEffect(() => {
@@ -793,8 +825,28 @@ const ComplianceWorkspace: React.FC = () => {
     console.log('🔄 Transforming documents to file nodes:', {
       userDocuments: userDocuments?.length || 0,
       complianceDocuments: complianceDocuments?.length || 0,
-      folders: folders?.length || 0
+      folders: folders?.length || 0,
+      timestamp: new Date().toISOString()
     });
+
+    // DEBUG: Log all user documents with their categories
+    if (userDocuments && userDocuments.length > 0) {
+      console.log('📋 USER DOCUMENTS DEBUG:', userDocuments.map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        category: doc.category,
+        updatedAt: doc.updatedAt
+      })));
+    }
+
+    // DEBUG: Log all available folders
+    if (folders && folders.length > 0) {
+      console.log('📁 FOLDERS DEBUG:', folders.map(f => ({
+        id: f.id,
+        name: f.name,
+        createdAt: f.createdAt
+      })));
+    }
 
     const folderNodes: Record<string, FileNode> = {};
     const allDocuments = [
@@ -836,6 +888,14 @@ const ComplianceWorkspace: React.FC = () => {
       };
     }
 
+    // DEBUG: Log created folder structure
+    console.log('📁 CREATED FOLDERS:', Object.values(folderNodes).map(folder => ({
+      id: folder.id,
+      name: folder.name,
+      folderId: folder.folderId,
+      isManaged: folder.isManaged
+    })));
+
     // Process documents and assign them to managed folders
     allDocuments.forEach(doc => {
       const category = ('category' in doc ? doc.category : 'Compliance') || 'General';
@@ -844,13 +904,21 @@ const ComplianceWorkspace: React.FC = () => {
         id: doc.id,
         title: doc.title,
         category: category,
-        type: doc.type
+        type: doc.type,
+        updatedAt: doc.updatedAt
       });
       
       // Find the managed folder that matches this document's category (case-insensitive)
       const matchingManagedFolder = Object.values(folderNodes).find(folder => 
         folder.isManaged && folder.name.toLowerCase() === category.toLowerCase()
       );
+      
+      console.log('🔍 FOLDER MATCHING DEBUG:', {
+        documentCategory: category,
+        availableFolders: Object.values(folderNodes).map(f => f.name),
+        matchingFolder: matchingManagedFolder?.name || 'NONE',
+        matchingFolderId: matchingManagedFolder?.folderId || 'NONE'
+      });
       
       const fileNode: FileNode = {
         id: `${doc.type}-${doc.id}`,
@@ -886,10 +954,14 @@ const ComplianceWorkspace: React.FC = () => {
     });
 
     const result = Object.values(folderNodes);
-    console.log('📋 Final folder structure:', result.map(folder => ({
+    console.log('📋 FINAL FOLDER STRUCTURE:', result.map(folder => ({
       name: folder.name,
       documentCount: folder.children?.length || 0,
-      isManaged: folder.isManaged
+      isManaged: folder.isManaged,
+      documents: folder.children?.map(child => ({
+        name: child.name,
+        category: child.document && 'category' in child.document ? child.document.category : 'N/A'
+      })) || []
     })));
 
     return result;
@@ -1166,12 +1238,34 @@ const ComplianceWorkspace: React.FC = () => {
               currentCategory: currentCategory
             });
             
+            // DEBUG: Log pre-move state
+            console.log('🔍 PRE-MOVE DEBUG STATE:', {
+              userDocumentsBefore: userDocuments?.map(doc => ({
+                id: doc.id,
+                title: doc.title,
+                category: doc.category,
+                updatedAt: doc.updatedAt
+              })) || [],
+              foldersBefore: folders?.map(f => ({ id: f.id, name: f.name })) || []
+            });
+            
             // Make the API call to update the document's category
             const response = await apiRequest('PATCH', `/api/user-documents/${actualDocumentId}`, { 
               category: targetFolderName 
             });
             
             console.log('✅ Document move API response:', response);
+            
+            // DEBUG: Parse and log the response data
+            const responseData = await response.json();
+            console.log('📊 PARSED API RESPONSE:', {
+              documentId: responseData.id,
+              title: responseData.title,
+              oldCategory: currentCategory,
+              newCategory: responseData.category,
+              updatedAt: responseData.updatedAt,
+              wasSuccessful: responseData.category === targetFolderName
+            });
             
             // More aggressive query invalidation to ensure UI updates
             console.log('🔄 Invalidating queries for UI refresh...');
@@ -1201,6 +1295,19 @@ const ComplianceWorkspace: React.FC = () => {
             ]);
             
             console.log('✅ Query invalidation completed');
+            
+            // DEBUG: Add a small delay and then log post-move state
+            setTimeout(() => {
+              console.log('🔍 POST-MOVE DEBUG STATE (delayed):', {
+                userDocumentsAfter: userDocuments?.map(doc => ({
+                  id: doc.id,
+                  title: doc.title,
+                  category: doc.category,
+                  updatedAt: doc.updatedAt
+                })) || [],
+                foldersAfter: folders?.map(f => ({ id: f.id, name: f.name })) || []
+              });
+            }, 1000);
             
             // Success feedback
             toast({
