@@ -2123,11 +2123,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`📝 Updating user document ${documentId}:`, {
         userId: req.user.id,
-        updateData: req.body
+        updateData: req.body,
+        timestamp: new Date().toISOString()
       });
       
       // Validate document ID
       if (isNaN(documentId)) {
+        console.log(`❌ Invalid document ID provided: ${req.params.id}`);
         return res.status(400).json({ message: "Invalid document ID" });
       }
       
@@ -2145,28 +2147,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`✅ Document found, proceeding with update:`, {
+        documentId: document.id,
         currentCategory: document.category,
-        newCategory: req.body.category
+        newCategory: req.body.category,
+        currentData: {
+          title: document.title,
+          status: document.status,
+          starred: document.starred,
+          updatedAt: document.updatedAt
+        }
       });
       
-      // Update the document
+      // Perform the update
+      console.log(`🔄 Executing database update for document ${documentId}...`);
       const updatedDocument = await storage.updateUserDocument(documentId, req.body);
       
       if (!updatedDocument) {
-        console.log(`❌ Update failed for document ${documentId}`);
+        console.log(`❌ Update failed for document ${documentId} - no document returned from storage`);
         return res.status(500).json({ message: "Failed to update document" });
       }
       
       console.log(`✅ Document ${documentId} updated successfully:`, {
         previousCategory: document.category,
         newCategory: updatedDocument.category,
-        updatedFields: Object.keys(req.body)
+        previousUpdatedAt: document.updatedAt,
+        newUpdatedAt: updatedDocument.updatedAt,
+        updatedFields: Object.keys(req.body),
+        wasActuallyUpdated: document.category !== updatedDocument.category
       });
+      
+      // Verify the update was successful by checking the returned data
+      if (req.body.category && updatedDocument.category !== req.body.category) {
+        console.error(`❌ Category update verification failed:`, {
+          expected: req.body.category,
+          actual: updatedDocument.category,
+          documentId
+        });
+        return res.status(500).json({ 
+          message: "Document update verification failed",
+          details: "Category was not updated as expected"
+        });
+      }
       
       res.status(200).json(updatedDocument);
     } catch (error: any) {
-      console.error(`❌ Error updating user document:`, error);
-      res.status(500).json({ message: "Error updating document", error: error.message });
+      console.error(`❌ Error updating user document:`, {
+        documentId: req.params.id,
+        userId: req.user?.id,
+        updateData: req.body,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      res.status(500).json({ 
+        message: "Error updating document", 
+        error: error.message,
+        details: "Check server logs for more information"
+      });
     }
   });
 

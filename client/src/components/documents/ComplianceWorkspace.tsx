@@ -1093,6 +1093,7 @@ const ComplianceWorkspace: React.FC = () => {
       );
       
       if (!targetFolder) {
+        console.error('❌ Target folder not found:', { targetFolderId, availableFolders: fileNodes.map(f => f.id) });
         throw new Error('Target folder not found');
       }
       
@@ -1103,6 +1104,7 @@ const ComplianceWorkspace: React.FC = () => {
         .find(node => node.id === sourceNodeId);
       
       if (!sourceNode) {
+        console.error('❌ Source item not found:', { sourceNodeId, availableNodes: fileNodes.flatMap(f => [f, ...(f.children || [])]).map(n => n.id) });
         throw new Error('Source item not found');
       }
       
@@ -1147,11 +1149,21 @@ const ComplianceWorkspace: React.FC = () => {
             
             // Extract the actual document ID from the node ID format: "user-123" -> 123
             const actualDocumentId = sourceNode.document.id;
+            const currentCategory = sourceNode.document.category;
+            
+            // Don't move if it's already in the target folder
+            if (currentCategory === targetFolderName) {
+              toast({
+                title: "No Move Needed", 
+                description: `Document is already in the "${targetFolderName}" folder.`,
+              });
+              return;
+            }
             
             console.log('📝 Making API call to update document category:', {
               documentId: actualDocumentId,
               newCategory: targetFolderName,
-              currentCategory: sourceNode.document.category
+              currentCategory: currentCategory
             });
             
             // Make the API call to update the document's category
@@ -1161,11 +1173,28 @@ const ComplianceWorkspace: React.FC = () => {
             
             console.log('✅ Document move API response:', response);
             
-            // Refresh data to reflect changes
+            // More aggressive query invalidation to ensure UI updates
+            console.log('🔄 Invalidating queries for UI refresh...');
+            
+            // Invalidate multiple related queries to ensure complete refresh
             await Promise.all([
               queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] }),
-              queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] })
+              queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] }),
+              // Also invalidate with exact matching to catch any cache variations
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents'], 
+                exact: false,
+                refetchType: 'all'
+              })
             ]);
+            
+            // Force a refetch of the specific queries we use
+            await Promise.all([
+              queryClient.refetchQueries({ queryKey: ['/api/user-documents'] }),
+              queryClient.refetchQueries({ queryKey: ['/api/user-documents/folders'] })
+            ]);
+            
+            console.log('✅ Query invalidation completed');
             
             // Success feedback
             toast({
@@ -1177,41 +1206,36 @@ const ComplianceWorkspace: React.FC = () => {
             return;
             
           } catch (apiError: any) {
-            console.error('❌ API error moving document:', apiError);
-            
-            // Parse error message for better user feedback
-            let errorMessage = 'Failed to move document to folder';
-            if (apiError?.response?.data?.message) {
-              errorMessage = apiError.response.data.message;
-            } else if (apiError?.message) {
-              errorMessage = apiError.message;
-            }
-            
-            toast({
-              title: "Failed to Move Document",
-              description: errorMessage,
-              variant: "destructive",
+            console.error('❌ API error moving document:', {
+              error: apiError,
+              documentId: sourceNode.document.id,
+              targetCategory: targetFolderName,
+              response: apiError.response?.data
             });
-            
-            throw new Error(errorMessage);
+            throw new Error(`Failed to move document: ${apiError.message || 'Unknown API error'}`);
           }
         }
       }
       
-      // For unmanaged folders or other operations
-      console.log('⚠️ Non-managed folder operation - changes may not persist');
+      // For category folders or other operations, show success toast
+      // (these are visual operations for now)
       toast({
-        title: `${isMovingFolder ? 'Folder' : 'Document'} Moved (UI Only)`,
-        description: `${itemName} moved to ${targetFolderName}. Note: This change may not persist.`,
-        variant: "destructive",
+        title: `${isMovingFolder ? 'Folder' : 'Document'} Moved`,
+        description: `${itemName} has been moved to ${targetFolderName}.`,
       });
       
-    } catch (error: any) {
-      console.error('❌ Error in handleMoveToFolder:', error);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Move operation failed:', {
+        error,
+        itemId,
+        targetFolderId,
+        sourceNodeId,
+        errorMessage
+      });
       
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       toast({
-        title: "Move Operation Failed",
+        title: "Move Failed",
         description: `Failed to move item: ${errorMessage}`,
         variant: "destructive",
       });

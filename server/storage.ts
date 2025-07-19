@@ -494,15 +494,44 @@ export class DatabaseStorage implements IStorage {
   }
   
   async updateUserDocument(id: number, data: Partial<InsertUserDocument>): Promise<UserDocument | undefined> {
-    const [updatedDocument] = await db
-      .update(userDocuments)
-      .set({
-        ...data,
-        updatedAt: new Date()
-      })
-      .where(eq(userDocuments.id, id))
-      .returning();
-    return updatedDocument;
+    try {
+      console.log(`🔄 Storage: Updating document ${id} with data:`, {
+        documentId: id,
+        updateData: data,
+        timestamp: new Date().toISOString()
+      });
+      
+      const [updatedDocument] = await db
+        .update(userDocuments)
+        .set({
+          ...data,
+          updatedAt: new Date()
+        })
+        .where(eq(userDocuments.id, id))
+        .returning();
+      
+      if (updatedDocument) {
+        console.log(`✅ Storage: Document ${id} updated successfully:`, {
+          documentId: updatedDocument.id,
+          newCategory: updatedDocument.category,
+          newUpdatedAt: updatedDocument.updatedAt,
+          fieldsUpdated: Object.keys(data)
+        });
+      } else {
+        console.error(`❌ Storage: Document ${id} update returned no results`);
+      }
+      
+      return updatedDocument;
+    } catch (error: any) {
+      console.error(`❌ Storage: Error updating document ${id}:`, {
+        documentId: id,
+        updateData: data,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
+    }
   }
   
   async deleteUserDocument(id: number): Promise<void> {
