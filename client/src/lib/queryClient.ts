@@ -47,7 +47,9 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      // CRITICAL FIX: Remove staleTime: Infinity to allow invalidated queries to refetch
+      // staleTime: Infinity, // This was preventing invalidated queries from refetching!
+      staleTime: 5 * 60 * 1000, // 5 minutes - reasonable stale time that still allows invalidation
       retry: false,
     },
     mutations: {

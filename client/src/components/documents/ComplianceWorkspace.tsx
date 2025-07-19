@@ -1178,8 +1178,14 @@ const ComplianceWorkspace: React.FC = () => {
             
             // Invalidate multiple related queries to ensure complete refresh
             await Promise.all([
-              queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] }),
-              queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] }),
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents'],
+                refetchType: 'all' // Force refetch even if stale time hasn't expired
+              }),
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents/folders'],
+                refetchType: 'all' // Force refetch even if stale time hasn't expired
+              }),
               // Also invalidate with exact matching to catch any cache variations
               queryClient.invalidateQueries({ 
                 queryKey: ['/api/user-documents'], 
