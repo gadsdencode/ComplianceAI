@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const [isEditDeadlineModalOpen, setIsEditDeadlineModalOpen] = useState(false);
   const [isAddDeadlineModalOpen, setIsAddDeadlineModalOpen] = useState(false);
   const [selectedDeadlineId, setSelectedDeadlineId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [, navigate] = useLocation();
   const { toast } = useToast();
   
@@ -109,6 +110,54 @@ export default function DashboardPage() {
   ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
 
   const isLoadingRecent = isLoadingRecentCompliance || isLoadingRecentUser;
+
+  // Filter documents based on search query
+  const filteredPendingDocuments = useMemo(() => {
+    if (!searchQuery.trim()) return pendingDocuments;
+    
+    const query = searchQuery.toLowerCase();
+    return pendingDocuments.filter(doc => {
+      // Search in title (always available)
+      const matchesTitle = doc.title.toLowerCase().includes(query);
+      
+      // Search in description if available (user documents)
+      const matchesDescription = (doc as any).description?.toLowerCase().includes(query) || false;
+      
+      // Search in content if available (compliance documents)
+      const matchesContent = (doc as any).content?.toLowerCase().includes(query) || false;
+      
+      // Search in tags if available (user documents)
+      const matchesTags = (doc as any).tags?.some((tag: string) => tag.toLowerCase().includes(query)) || false;
+      
+      return matchesTitle || matchesDescription || matchesContent || matchesTags;
+    });
+  }, [pendingDocuments, searchQuery]);
+
+  const filteredRecentDocuments = useMemo(() => {
+    if (!searchQuery.trim()) return recentDocuments;
+    
+    const query = searchQuery.toLowerCase();
+    return recentDocuments.filter(doc => {
+      // Search in title (always available)
+      const matchesTitle = doc.title.toLowerCase().includes(query);
+      
+      // Search in description if available (user documents)
+      const matchesDescription = (doc as any).description?.toLowerCase().includes(query) || false;
+      
+      // Search in content if available (compliance documents)
+      const matchesContent = (doc as any).content?.toLowerCase().includes(query) || false;
+      
+      // Search in tags if available (user documents)
+      const matchesTags = (doc as any).tags?.some((tag: string) => tag.toLowerCase().includes(query)) || false;
+      
+      return matchesTitle || matchesDescription || matchesContent || matchesTags;
+    });
+  }, [recentDocuments, searchQuery]);
+
+  // Search handler for dashboard layout
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+  };
 
   // Fetch compliance deadlines
   const {
@@ -207,7 +256,22 @@ export default function DashboardPage() {
     <DashboardLayout 
       pageTitle="Dashboard" 
       notificationCount={dashboardStats?.pending || 0}
+      onSearch={handleSearch}
     >
+      {searchQuery && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-800">
+            Showing {(filteredPendingDocuments.length + filteredRecentDocuments.length)} result{(filteredPendingDocuments.length + filteredRecentDocuments.length) !== 1 ? 's' : ''} for: <span className="font-semibold">"{searchQuery}"</span>
+            <button 
+              onClick={() => setSearchQuery('')} 
+              className="ml-2 text-blue-600 hover:text-blue-800 underline"
+            >
+              Clear search
+            </button>
+          </p>
+        </div>
+      )}
+
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Welcome to ComplianceAI</h1>
@@ -233,8 +297,8 @@ export default function DashboardPage() {
       />
 
       <DocumentsSection 
-        pendingDocuments={pendingDocuments || []} 
-        recentDocuments={recentDocuments || []}
+        pendingDocuments={filteredPendingDocuments || []} 
+        recentDocuments={filteredRecentDocuments || []}
         isLoading={isLoadingPending || isLoadingRecent}
       />
 
