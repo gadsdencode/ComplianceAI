@@ -1,4 +1,5 @@
 import { runMigration as addUserDocumentsTable } from "./migrations/add-user-documents-table.js";
+import { runMigration as addNotificationsTable } from "./migrations/add-notifications-table.js";
 
 async function runAllMigrations() {
   console.log("Starting database migrations...");
@@ -6,6 +7,7 @@ async function runAllMigrations() {
   try {
     // Add new migrations here in sequence
     await addUserDocumentsTable();
+    await addNotificationsTable();
     
     console.log("All migrations completed successfully");
   } catch (error) {
@@ -15,7 +17,7 @@ async function runAllMigrations() {
 }
 
 // Run all migrations when this script is executed directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   runAllMigrations()
     .then(() => process.exit(0))
     .catch((err) => {

@@ -103,6 +103,21 @@ export const userDocuments = pgTable("user_documents", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  type: text("type", { enum: ["document_update", "deadline_reminder", "approval_request", "system_notification", "user_document_upload"] }).notNull(),
+  priority: text("priority", { enum: ["low", "medium", "high", "urgent"] }).notNull().default("medium"),
+  isRead: boolean("is_read").notNull().default(false),
+  relatedId: integer("related_id"), // ID of related document, deadline, etc.
+  relatedType: varchar("related_type", { length: 100 }), // Type of related item
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertDocumentSchema = createInsertSchema(documents)
@@ -113,6 +128,7 @@ export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: t
 export const insertAuditTrailSchema = createInsertSchema(auditTrail).omit({ id: true, timestamp: true });
 export const insertComplianceDeadlineSchema = createInsertSchema(complianceDeadlines).omit({ id: true, createdAt: true });
 export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type definitions
 export type User = typeof users.$inferSelect;
@@ -138,3 +154,6 @@ export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 
 export type UserDocument = typeof userDocuments.$inferSelect;
 export type InsertUserDocument = typeof userDocuments.$inferInsert;
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;

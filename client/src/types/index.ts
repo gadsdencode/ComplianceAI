@@ -194,3 +194,27 @@ export interface BulkUploadMetadata {
   folderId?: string;
   category?: string;
 }
+
+// Notification related types
+export type NotificationType = "document_update" | "deadline_reminder" | "approval_request" | "system_notification" | "user_document_upload";
+export type NotificationPriority = "low" | "medium" | "high" | "urgent";
+
+export interface Notification {
+  id: number;
+  userId: number;
+  title: string;
+  message: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  isRead: boolean;
+  relatedId?: number; // ID of related document, deadline, etc.
+  relatedType?: string; // Type of related item
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationCounts {
+  total: number;
+  unread: number;
+  byType: Record<NotificationType, number>;
+}

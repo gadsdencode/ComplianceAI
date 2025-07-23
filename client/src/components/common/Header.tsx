@@ -3,6 +3,8 @@ import { Bell, Search, Menu } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "../ui/button";
+import NotificationDropdown from "./NotificationDropdown";
+import { useQuery } from "@tanstack/react-query";
 
 type HeaderProps = {
   pageTitle: string;
@@ -18,6 +20,14 @@ export default function Header({
   toggleMobileSidebar,
 }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Fetch notification counts for the badge
+  const { data: notificationCounts } = useQuery<{ total: number; unread: number }>({
+    queryKey: ['/api/notifications/counts'],
+    staleTime: 30 * 1000, // 30 seconds
+  });
+
+  const unreadCount = notificationCounts?.unread || 0;
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -44,20 +54,22 @@ export default function Header({
             />
           </div>
           
-          <Button 
-            title="Toggle mobile sidebar"
-            className="relative"
-            onClick={toggleMobileSidebar}
-          >
-            <Bell className="h-5 w-5 text-slate-600" />
-            {notificationCount > 0 && (
-              <Badge 
-                className="absolute -right-1 -top-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full p-0"
-              >
-                {notificationCount > 9 ? '9+' : notificationCount}
-              </Badge>
-            )}
-          </Button>
+          <NotificationDropdown>
+            <Button 
+              title="Notifications"
+              className="relative"
+              variant="ghost"
+            >
+              <Bell className="h-5 w-5 text-slate-600" />
+              {unreadCount > 0 && (
+                <Badge 
+                  className="absolute -right-1 -top-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full p-0"
+                >
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Badge>
+              )}
+            </Button>
+          </NotificationDropdown>
           
           <Button 
             title="Toggle mobile sidebar"

@@ -1,9 +1,9 @@
-import { users, documents, documentVersions, signatures, auditTrail, complianceDeadlines, templates, userDocuments } from "../shared/schema.js";
+import { users, documents, documentVersions, signatures, auditTrail, complianceDeadlines, templates, userDocuments, notifications } from "../shared/schema.js";
 import type { 
   User, InsertUser, Document, InsertDocument, DocumentVersion, InsertDocumentVersion,
   Signature, InsertSignature, AuditTrail, InsertAuditTrail, 
   ComplianceDeadline, InsertComplianceDeadline, Template, InsertTemplate,
-  UserDocument, InsertUserDocument
+  UserDocument, InsertUserDocument, Notification, InsertNotification
 } from "../shared/schema.js";
 import session from "express-session";
 import { eq, gt, desc, asc, and, sql } from "drizzle-orm";
@@ -68,6 +68,19 @@ export interface IStorage {
   createUserDocument(document: InsertUserDocument): Promise<UserDocument>;
   updateUserDocument(id: number, data: Partial<InsertUserDocument>): Promise<UserDocument | undefined>;
   deleteUserDocument(id: number): Promise<void>;
+  
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: number, options?: {
+    isRead?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<Notification[]>;
+  getNotification(id: number): Promise<Notification | undefined>;
+  markNotificationAsRead(id: number): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: number): Promise<void>;
+  deleteNotification(id: number): Promise<void>;
+  getNotificationCounts(userId: number): Promise<{ total: number; unread: number }>;
   
   // Session store
   sessionStore: session.Store;
@@ -538,6 +551,88 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(userDocuments)
       .where(eq(userDocuments.id, id));
+  }
+
+  // Notifications
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db
+      .insert(notifications)
+      .values(notification)
+      .returning();
+    return newNotification;
+  }
+
+  async getUserNotifications(userId: number, options: {
+    isRead?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<Notification[]> {
+    const baseQuery = db.select().from(notifications);
+    type QueryType = typeof baseQuery;
+
+    // Build filters array
+    const filters = [eq(notifications.userId, userId)];
+
+    if (options.isRead !== undefined) {
+      filters.push(eq(notifications.isRead, options.isRead));
+    }
+
+    // Apply all filters with and()
+    let query = baseQuery.where(and(...filters)) as QueryType;
+
+    if (options.limit !== undefined) {
+      query = query.limit(options.limit) as QueryType;
+    }
+
+    if (options.offset !== undefined) {
+      query = query.offset(options.offset) as QueryType;
+    }
+
+    return await query.orderBy(desc(notifications.createdAt));
+  }
+
+  async getNotification(id: number): Promise<Notification | undefined> {
+    const [notification] = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, id));
+    return notification;
+  }
+
+  async markNotificationAsRead(id: number): Promise<Notification | undefined> {
+    const [updatedNotification] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return updatedNotification;
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async deleteNotification(id: number): Promise<void> {
+    await db
+      .delete(notifications)
+      .where(eq(notifications.id, id));
+  }
+
+  async getNotificationCounts(userId: number): Promise<{ total: number; unread: number }> {
+    const [counts] = await db
+      .select({
+        total: sql`count(*)`,
+        unread: sql`count(*) filter (where is_read = false)`
+      })
+      .from(notifications)
+      .where(eq(notifications.userId, userId));
+    return {
+      total: parseInt(counts.total as string),
+      unread: parseInt(counts.unread as string)
+    };
   }
 }
 

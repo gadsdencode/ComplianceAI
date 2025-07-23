@@ -16,6 +16,10 @@ export async function runMigration() {
       file_size INTEGER NOT NULL,
       file_url TEXT NOT NULL,
       tags TEXT[],
+      category VARCHAR(100) DEFAULT 'General',
+      starred BOOLEAN DEFAULT false,
+      status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'review', 'approved', 'archived')),
+      is_folder_placeholder BOOLEAN DEFAULT false,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
@@ -28,14 +32,4 @@ export async function runMigration() {
   `);
 
   console.log("Migration completed: user_documents table created");
-}
-
-// Run the migration if this file is executed directly
-if (require.main === module) {
-  runMigration()
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error("Migration failed:", err);
-      process.exit(1);
-    });
 } 

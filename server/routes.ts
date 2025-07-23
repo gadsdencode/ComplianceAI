@@ -228,6 +228,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ipAddress: req.ip
       });
       
+      // Create notification for admins and compliance officers about new document
+      if (req.user.role === "employee") {
+        const users = await storage.listUsers();
+        const adminUsers = users.filter(user => 
+          user.role === "admin" || user.role === "compliance_officer"
+        );
+        
+        for (const adminUser of adminUsers) {
+          await storage.createNotification({
+            userId: adminUser.id,
+            title: "New Document Created",
+            message: `Document "${document.title}" has been created by ${req.user.name}`,
+            type: "document_update",
+            priority: "medium",
+            relatedId: document.id,
+            relatedType: "document"
+          });
+        }
+      }
+      
       res.status(201).json(document);
     } catch (error: any) {
       console.error("Error creating document:", error);
@@ -1821,6 +1841,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tags: Array.isArray(metadata.tags) ? metadata.tags : [],
           category: category,
         });
+
+        // Create notification for admins and compliance officers about new user document
+        const users = await storage.listUsers();
+        const adminUsers = users.filter(user => 
+          user.role === "admin" || user.role === "compliance_officer"
+        );
+        
+        for (const adminUser of adminUsers) {
+          await storage.createNotification({
+            userId: adminUser.id,
+            title: "New User Document Uploaded",
+            message: `Document "${newDocument.title}" has been uploaded by ${req.user.name}`,
+            type: "user_document_upload",
+            priority: "low",
+            relatedId: newDocument.id,
+            relatedType: "user_document"
+          });
+        }
         
         console.log("Document created successfully:", newDocument);
         res.status(201).json(newDocument);
@@ -2231,10 +2269,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           let objectStorage: any;
           
-                 if (isReplitEnvironment) {
-         objectStorage = new ObjectStorageClient({
-           bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-         });
+          if (isReplitEnvironment) {
+            objectStorage = new ObjectStorageClient({
+              bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+            });
           } else {
             objectStorage = objectClient;
           }
@@ -2256,173 +2294,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Duplicate user document
-  app.post("/api/user-documents/:id/duplicate", async (req: Request, res: Response) => {
+  // Notifications API
+  app.get("/api/notifications", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     
     try {
-      const originalDocumentId = parseInt(req.params.id);
+      const options: any = {};
       
-      // Check if document exists and belongs to user
-      const originalDocument = await storage.getUserDocument(originalDocumentId);
-      
-      if (!originalDocument) {
-        return res.status(404).json({ message: "Document not found" });
+      if (req.query.isRead !== undefined) {
+        options.isRead = req.query.isRead === 'true';
       }
       
-      if (originalDocument.userId !== req.user.id) {
-        return res.status(403).json({ message: "Forbidden" });
+      if (req.query.limit) {
+        options.limit = parseInt(req.query.limit as string);
       }
       
-      // Create duplicate with new title and reset status to draft
-      const duplicateData = {
-        userId: req.user.id,
-        title: `${originalDocument.title} (Copy)`,
-        description: originalDocument.description,
-        fileName: `copy_${originalDocument.fileName}`,
-        fileType: originalDocument.fileType,
-        fileSize: originalDocument.fileSize,
-        fileUrl: originalDocument.fileUrl, // Keep the same file URL since it's the same content
-        tags: originalDocument.tags,
-        category: originalDocument.category,
-        starred: false, // Reset starred status
-        status: "draft" as const // Reset to draft
-      };
+      if (req.query.offset) {
+        options.offset = parseInt(req.query.offset as string);
+      }
       
-      const duplicateDocument = await storage.createUserDocument(duplicateData);
-      
-      res.json(duplicateDocument);
+      const notifications = await storage.getUserNotifications(req.user.id, options);
+      res.json(notifications);
     } catch (error: any) {
-      res.status(500).json({ message: "Error duplicating document", error: error.message });
+      res.status(500).json({ message: "Error retrieving notifications", error: error.message });
     }
   });
 
-  // Document Files API
-  app.post("/api/documents/:id/files", upload.single('file'), async (req: any, res: Response) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const documentId = parseInt(req.params.id);
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-    const objectName = `documents/${documentId}/${Date.now()}-${file.originalname}`;
-    try {
-      const uploadResult = await objectClient.uploadFromBytes(objectName, file.buffer);
-      if (!uploadResult.ok) {
-        return res.status(500).json({ message: "Error uploading file", error: uploadResult.error });
-      }
-      await storage.createAuditRecord({
-        documentId,
-        userId: req.user.id,
-        action: "FILE_UPLOADED",
-        details: `Uploaded file ${file.originalname}`,
-        ipAddress: req.ip
-      });
-      res.status(201).json({ name: file.originalname, key: objectName });
-    } catch (err: any) {
-      res.status(500).json({ message: "Error uploading file", error: err.message });
-    }
-  });
-
-  app.get("/api/documents/:id/files", async (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const documentId = parseInt(req.params.id);
-    try {
-      const listResult = await objectClient.list({ prefix: `documents/${documentId}/` });
-      if (!listResult.ok) {
-        return res.status(500).json({ message: "Error listing files", error: listResult.error });
-      }
-      const files = listResult.value.map((f: any) => ({ name: f.name.split('/').slice(2).join('/'), key: f.name }));
-      res.json(files);
-    } catch (err: any) {
-      res.status(500).json({ message: "Error listing files", error: err.message });
-    }
-  });
-
-  app.get("/api/documents/:id/files/:fileName", async (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const documentId = parseInt(req.params.id);
-    const fileName = req.params.fileName;
-    const objectKey = `documents/${documentId}/${fileName}`;
-    try {
-      const existsResult = await objectClient.exists(objectKey);
-      if (!existsResult.ok) {
-        return res.status(500).json({ message: "Error checking file", error: existsResult.error });
-      }
-      if (!existsResult.value) {
-        return res.status(404).json({ message: "File not found" });
-      }
-      const stream = objectClient.downloadAsStream(objectKey);
-      const contentType = mime.lookup(fileName) as string || 'application/octet-stream';
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      stream.pipe(res);
-    } catch (err: any) {
-      res.status(500).json({ message: "Error downloading file", error: err.message });
-    }
-  });
-
-  app.delete("/api/documents/:id/files/:fileName", async (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const documentId = parseInt(req.params.id);
-    const fileName = req.params.fileName;
-    const objectKey = `documents/${documentId}/${fileName}`;
-    try {
-      const deleteResult = await objectClient.delete(objectKey);
-      if (!deleteResult.ok) {
-        return res.status(500).json({ message: "Error deleting file", error: deleteResult.error });
-      }
-      await storage.createAuditRecord({
-        documentId,
-        userId: req.user.id,
-        action: "FILE_DELETED",
-        details: `Deleted file ${fileName}`,
-        ipAddress: req.ip
-      });
-      res.sendStatus(204);
-    } catch (err: any) {
-      res.status(500).json({ message: "Error deleting file", error: err.message });
-    }
-  });
-
-  // Add this endpoint after your existing document file endpoints
-  app.get("/api/documents/files", async (req: Request, res: Response) => {
+  app.get("/api/notifications/counts", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     
     try {
-      const listResult = await objectClient.list({ prefix: 'documents/' });
-      if (!listResult.ok) {
-        return res.status(500).json({ message: "Error listing files", error: listResult.error });
+      const counts = await storage.getNotificationCounts(req.user.id);
+      res.json(counts);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving notification counts", error: error.message });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const notificationId = parseInt(req.params.id);
+      const notification = await storage.markNotificationAsRead(notificationId);
+      
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
       }
       
-      // Transform the results to include document IDs
-      const files = listResult.value.map((file: any) => {
-        const parts = file.name.split('/');
-        if (parts.length >= 2) {
-          return {
-            name: parts.slice(2).join('/'),
-            key: file.name,
-            documentId: parseInt(parts[1], 10)
-          };
-        }
-        return null;
-      }).filter(Boolean);
-      
-      res.json(files);
-    } catch (err: any) {
-      res.status(500).json({ message: "Error listing all files", error: err.message });
+      res.json(notification);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error marking notification as read", error: error.message });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      await storage.markAllNotificationsAsRead(req.user.id);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error marking all notifications as read", error: error.message });
+    }
+  });
+
+  app.delete("/api/notifications/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const notificationId = parseInt(req.params.id);
+      await storage.deleteNotification(notificationId);
+      res.sendStatus(204);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting notification", error: error.message });
     }
   });
 
