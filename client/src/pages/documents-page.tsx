@@ -8,9 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import { Document, UserDocument } from '@/types';
-import { Plus, Filter, Search, FileText, FolderPlus, Star, Download, Eye, Edit, Trash2, Share2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Plus, Filter, Search, FileText, FolderPlus, Star, Download, Eye, Edit, Trash2, Share2, Calendar, User, Clock, Tag, X, ExternalLink } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 
@@ -30,6 +32,7 @@ export default function DocumentsPage() {
   const [activeTab, setActiveTab] = useState('all');
   const [documentType, setDocumentType] = useState<'all' | 'compliance' | 'user'>('all');
   const [selectedDocument, setSelectedDocument] = useState<UnifiedDocument | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -140,13 +143,13 @@ export default function DocumentsPage() {
   };
 
   const handleViewDocument = (document: UnifiedDocument) => {
-    if (document.type === 'user') {
-      // For user documents, show in modal or navigate to detail view
-      setSelectedDocument(document);
-    } else {
-      // For compliance documents, navigate to detail page
-      window.location.href = `/documents/${document.id}`;
-    }
+    setSelectedDocument(document);
+    setIsViewerOpen(true);
+  };
+
+  const handleCloseViewer = () => {
+    setIsViewerOpen(false);
+    setSelectedDocument(null);
   };
 
   const handleDownloadDocument = (documentItem: UnifiedDocument) => {
@@ -189,6 +192,268 @@ export default function DocumentsPage() {
       <Badge className={type === 'compliance' ? "bg-purple-100 text-purple-800" : "bg-orange-100 text-orange-800"}>
         {type.toUpperCase()}
       </Badge>
+    );
+  };
+
+  const DocumentViewer = () => {
+    if (!selectedDocument) return null;
+
+    const doc = selectedDocument.document;
+    const isUserDocument = selectedDocument.type === 'user';
+    const userDoc = isUserDocument ? doc as UserDocument : null;
+    const complianceDoc = !isUserDocument ? doc as Document : null;
+
+    return (
+      <Dialog open={isViewerOpen} onOpenChange={setIsViewerOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-slate-600" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-semibold">{selectedDocument.title}</DialogTitle>
+                  <div className="flex items-center space-x-2 mt-1">
+                    {getTypeBadge(selectedDocument.type)}
+                    {getStatusBadge(selectedDocument.status)}
+                    {selectedDocument.category && (
+                      <Badge variant="outline">{selectedDocument.category}</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleCloseViewer}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto">
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="content">Content</TabsTrigger>
+                <TabsTrigger value="actions">Actions</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="details" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Basic Information */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center">
+                        <FileText className="h-4 w-4 mr-2" />
+                        Basic Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-slate-600">Title</span>
+                        <span className="text-sm">{selectedDocument.title}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-slate-600">Type</span>
+                        <span className="text-sm capitalize">{selectedDocument.type}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-slate-600">Status</span>
+                        <span className="text-sm capitalize">{selectedDocument.status.replace('_', ' ')}</span>
+                      </div>
+                      {selectedDocument.category && (
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-slate-600">Category</span>
+                          <span className="text-sm">{selectedDocument.category}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Timestamps */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center">
+                        <Clock className="h-4 w-4 mr-2" />
+                        Timestamps
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-slate-600">Created</span>
+                        <span className="text-sm">{format(new Date(selectedDocument.createdAt), 'PPP')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-slate-600">Updated</span>
+                        <span className="text-sm">{format(new Date(selectedDocument.updatedAt), 'PPP')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-slate-600">Age</span>
+                        <span className="text-sm">{formatDistanceToNow(new Date(selectedDocument.createdAt), { addSuffix: true })}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Document Specific Information */}
+                  {isUserDocument && userDoc && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center">
+                          <Download className="h-4 w-4 mr-2" />
+                          File Information
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-slate-600">File Name</span>
+                          <span className="text-sm">{userDoc.fileName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-slate-600">File Type</span>
+                          <span className="text-sm">{userDoc.fileType}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-slate-600">File Size</span>
+                          <span className="text-sm">{(userDoc.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                        {userDoc.description && (
+                          <div className="flex justify-between">
+                            <span className="text-sm font-medium text-slate-600">Description</span>
+                            <span className="text-sm">{userDoc.description}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {!isUserDocument && complianceDoc && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center">
+                          <User className="h-4 w-4 mr-2" />
+                          Compliance Information
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium text-slate-600">Version</span>
+                          <span className="text-sm">{complianceDoc.version}</span>
+                        </div>
+                        {complianceDoc.expiresAt && (
+                          <div className="flex justify-between">
+                            <span className="text-sm font-medium text-slate-600">Expires</span>
+                            <span className="text-sm">{format(new Date(complianceDoc.expiresAt), 'PPP')}</span>
+                          </div>
+                        )}
+                        {userDoc?.tags && userDoc.tags.length > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-sm font-medium text-slate-600">Tags</span>
+                            <div className="flex flex-wrap gap-1">
+                              {userDoc.tags.map((tag, index) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="content" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Document Content</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isUserDocument && userDoc ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">File Preview</span>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDownloadDocument(selectedDocument)}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
+                        </div>
+                        <div className="border rounded-lg p-4 bg-slate-50">
+                          <p className="text-sm text-slate-600">
+                            File: {userDoc.fileName} ({userDoc.fileType})
+                          </p>
+                          <p className="text-sm text-slate-500 mt-1">
+                            Click download to view the full file content.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="border rounded-lg p-4 bg-slate-50">
+                          <p className="text-sm text-slate-600">
+                            {complianceDoc?.content || 'No content available'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="actions" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Available Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleDownloadDocument(selectedDocument)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Document
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => {
+                          // Navigate to edit mode
+                          window.location.href = `/documents/${selectedDocument.id}?action=edit`;
+                        }}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Document
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                      >
+                        <Share2 className="h-4 w-4 mr-2" />
+                        Share Document
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                      >
+                        <Star className="h-4 w-4 mr-2" />
+                        Star Document
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   };
 
@@ -278,6 +543,7 @@ export default function DocumentsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewDocument(doc)}
+                            title="View document details"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -285,6 +551,7 @@ export default function DocumentsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDownloadDocument(doc)}
+                            title="Download document"
                           >
                             <Download className="h-4 w-4" />
                           </Button>
@@ -315,6 +582,9 @@ export default function DocumentsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Document Viewer Modal */}
+      <DocumentViewer />
     </DashboardLayout>
   );
 }
