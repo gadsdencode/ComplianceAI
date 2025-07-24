@@ -42,23 +42,37 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
-// Create a persister for localStorage
+// Create a persister for localStorage with better error handling
 export const persister = createSyncStoragePersister({
   storage: typeof window !== 'undefined' ? window.localStorage : undefined,
   key: 'compliance-ai-query-cache', // Unique key for this app
-  serialize: data => JSON.stringify(data),
-  deserialize: data => JSON.parse(data),
+  serialize: (data: unknown) => {
+    try {
+      return JSON.stringify(data);
+    } catch (error) {
+      console.error('Error serializing cache data:', error);
+      return '{}';
+    }
+  },
+  deserialize: (data: string) => {
+    try {
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('Error deserializing cache data:', error);
+      return {};
+    }
+  },
 });
 
-// Create the query client
+// Create the query client with better configuration
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
+      staleTime: 1000 * 60 * 30, // 30 minutes - longer stale time for better persistence
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours - much longer cache time
       retry: false,
     },
     mutations: {
@@ -66,3 +80,14 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Add debugging for cache operations
+if (typeof window !== 'undefined') {
+  // Debug cache on mount
+  console.log('🔍 Initial cache state:', queryClient.getQueryCache().getAll());
+  
+  // Monitor cache changes
+  queryClient.getQueryCache().subscribe((event) => {
+    console.log('🔄 Cache event:', event.type, event.query?.queryKey);
+  });
+}

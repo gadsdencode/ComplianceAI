@@ -36,6 +36,7 @@ import DocumentMoreOptions from '@/components/documents/DocumentMoreOptions';
 import UserDocumentEditModal from '@/components/documents/UserDocumentEditModal';
 import ShareModal from '@/components/documents/ShareModal';
 import FolderManager from '@/components/documents/FolderManager';
+import { CacheDebugger } from '@/components/debug/CacheDebugger';
 
 interface FileNode {
   id: string;
@@ -1723,6 +1724,9 @@ const ComplianceWorkspace: React.FC = () => {
             onDownload={() => handleDownloadDocument({ document: sharingDocument } as FileNode)}
           />
         )}
+
+        {/* Cache Debugger - Only show in development */}
+        {process.env.NODE_ENV === 'development' && <CacheDebugger />}
       </div>
     </div>
   );

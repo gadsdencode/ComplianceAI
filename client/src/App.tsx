@@ -50,7 +50,9 @@ function App() {
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
             // Only persist queries that are not in error state and have data
-            return query.state.status === 'success' && query.state.data !== undefined;
+            const shouldPersist = query.state.status === 'success' && query.state.data !== undefined;
+            console.log('🔄 Persistence check:', query.queryKey, shouldPersist);
+            return shouldPersist;
           },
         },
       }}
