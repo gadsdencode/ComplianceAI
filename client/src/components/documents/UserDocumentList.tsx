@@ -100,11 +100,17 @@ export default function UserDocumentList({
   };
 
   const handleDownload = (doc: UserDocument) => {
-    // Use the same approach as working file downloads to preserve authentication
-    const link = window.document.createElement('a');
-    link.href = doc.fileUrl; // This is already the full API path: /api/user-documents/:id/download
+    // Create a proper download URL using the API endpoint
+    const downloadUrl = `/api/user-documents/${doc.id}/download`;
+    
+    const link = document.createElement('a');
+    link.href = downloadUrl;
     link.setAttribute('download', doc.fileName);
     link.style.display = 'none';
+    
+    // Add credentials to ensure authentication
+    link.setAttribute('crossorigin', 'use-credentials');
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

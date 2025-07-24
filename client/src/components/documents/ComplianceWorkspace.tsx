@@ -1176,13 +1176,19 @@ const ComplianceWorkspace: React.FC = () => {
     
     if ('userId' in node.document) {
       // User document - use API endpoint with proper authentication
-      const link = document.createElement('a');
-      link.href = node.document.fileUrl; // This is the API endpoint: /api/user-documents/:id/download
+      const downloadUrl = `/api/user-documents/${node.document.id}/download`;
+      
+      const link = globalThis.document.createElement('a');
+      link.href = downloadUrl;
       link.setAttribute('download', node.document.fileName);
       link.style.display = 'none';
-      document.body.appendChild(link);
+      
+      // Add credentials to ensure authentication
+      link.setAttribute('crossorigin', 'use-credentials');
+      
+      globalThis.document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      globalThis.document.body.removeChild(link);
     } else {
       // Compliance document - for now, just show a toast
       toast({

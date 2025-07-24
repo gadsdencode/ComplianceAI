@@ -155,13 +155,28 @@ export default function DocumentsPage() {
   const handleDownloadDocument = (documentItem: UnifiedDocument) => {
     if (documentItem.type === 'user') {
       const userDoc = documentItem.document as UserDocument;
+      
+      // Create a proper download URL using the API endpoint
+      const downloadUrl = `/api/user-documents/${userDoc.id}/download`;
+      
+      // Create a temporary link element and trigger download
       const link = globalThis.document.createElement('a');
-      link.href = userDoc.fileUrl;
+      link.href = downloadUrl;
       link.setAttribute('download', userDoc.fileName);
       link.style.display = 'none';
+      
+      // Add credentials to ensure authentication
+      link.setAttribute('crossorigin', 'use-credentials');
+      
       globalThis.document.body.appendChild(link);
       link.click();
       globalThis.document.body.removeChild(link);
+      
+      // Show success toast
+      toast({
+        title: "Download Started",
+        description: `Downloading ${userDoc.fileName}...`,
+      });
     } else {
       toast({
         title: "Download",
