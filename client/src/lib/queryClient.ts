@@ -1,5 +1,4 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -42,37 +41,15 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
-// Create a persister for localStorage with better error handling
-export const persister = createSyncStoragePersister({
-  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  key: 'compliance-ai-query-cache', // Unique key for this app
-  serialize: (data: unknown) => {
-    try {
-      return JSON.stringify(data);
-    } catch (error) {
-      console.error('Error serializing cache data:', error);
-      return '{}';
-    }
-  },
-  deserialize: (data: string) => {
-    try {
-      return JSON.parse(data);
-    } catch (error) {
-      console.error('Error deserializing cache data:', error);
-      return {};
-    }
-  },
-});
-
-// Create the query client with better configuration
+// Create the query client with proper caching configuration
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: 1000 * 60 * 30, // 30 minutes - longer stale time for better persistence
-      gcTime: 1000 * 60 * 60 * 24, // 24 hours - much longer cache time
+      staleTime: 1000 * 60 * 5, // 5 minutes - reasonable cache time
+      gcTime: 1000 * 60 * 10, // 10 minutes - keep in memory longer
       retry: false,
     },
     mutations: {

@@ -36,7 +36,6 @@ import DocumentMoreOptions from '@/components/documents/DocumentMoreOptions';
 import UserDocumentEditModal from '@/components/documents/UserDocumentEditModal';
 import ShareModal from '@/components/documents/ShareModal';
 import FolderManager from '@/components/documents/FolderManager';
-import { CacheDebugger } from '@/components/debug/CacheDebugger';
 
 interface FileNode {
   id: string;
@@ -1350,30 +1349,14 @@ const ComplianceWorkspace: React.FC = () => {
               );
             });
             
-            // Also invalidate related queries to ensure everything is in sync
-            await Promise.all([
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents'],
-                refetchType: 'active'
-              }),
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents/folders'],
-                refetchType: 'active'
-              })
-            ]);
+            // Success feedback
+            toast({
+              title: "Document Moved Successfully",
+              description: `"${itemName}" has been moved to ${targetFolderName}.`,
+            });
             
-            // DEBUG: Add a small delay and then log post-move state
-            setTimeout(() => {
-              console.log('🔍 POST-MOVE DEBUG STATE (delayed):', {
-                userDocumentsAfter: userDocuments?.map(doc => ({
-                  id: doc.id,
-                  title: doc.title,
-                  category: doc.category,
-                  updatedAt: doc.updatedAt
-                })) || [],
-                foldersAfter: folders?.map(f => ({ id: f.id, name: f.name })) || []
-              });
-            }, 1000);
+            console.log('✅ Document move completed successfully');
+            return;
             
             // Success feedback
             toast({
@@ -1724,9 +1707,6 @@ const ComplianceWorkspace: React.FC = () => {
             onDownload={() => handleDownloadDocument({ document: sharingDocument } as FileNode)}
           />
         )}
-
-        {/* Cache Debugger - Only show in development */}
-        {process.env.NODE_ENV === 'development' && <CacheDebugger />}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { Switch, Route } from "wouter";
-import { queryClient, persister } from "./lib/queryClient";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
@@ -43,25 +43,12 @@ function Router() {
 
 function App() {
   return (
-    <PersistQueryClientProvider 
-      client={queryClient}
-      persistOptions={{ 
-        persister,
-        dehydrateOptions: {
-          shouldDehydrateQuery: (query) => {
-            // Only persist queries that are not in error state and have data
-            const shouldPersist = query.state.status === 'success' && query.state.data !== undefined;
-            console.log('🔄 Persistence check:', query.queryKey, shouldPersist);
-            return shouldPersist;
-          },
-        },
-      }}
-    >
+    <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Router />
         <Toaster />
       </AuthProvider>
-    </PersistQueryClientProvider>
+    </QueryClientProvider>
   );
 }
 

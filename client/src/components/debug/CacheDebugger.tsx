@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { checkCacheState, checkLocalStorage, clearCache } from '@/lib/cache-utils';
+import { checkCacheState, checkLocalStorage, clearCache, persistSpecificQueries } from '@/lib/cache-utils';
 
 export const CacheDebugger = () => {
   const [cacheInfo, setCacheInfo] = useState<any>(null);
@@ -19,13 +19,18 @@ export const CacheDebugger = () => {
     refreshCacheInfo();
   };
 
+  const handlePersistCache = async () => {
+    await persistSpecificQueries([['/api/user-documents'], ['/api/user-documents/folders']]);
+    refreshCacheInfo();
+  };
+
   return (
     <Card className="fixed bottom-4 left-4 w-96 bg-white/10 backdrop-blur-sm border-white/20">
       <CardHeader>
         <CardTitle className="text-white text-sm">Cache Debugger</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button 
             size="sm" 
             onClick={refreshCacheInfo}
@@ -35,10 +40,17 @@ export const CacheDebugger = () => {
           </Button>
           <Button 
             size="sm" 
+            onClick={handlePersistCache}
+            className="bg-green-500 hover:bg-green-600"
+          >
+            Persist
+          </Button>
+          <Button 
+            size="sm" 
             onClick={handleClearCache}
             variant="destructive"
           >
-            Clear Cache
+            Clear
           </Button>
         </div>
         

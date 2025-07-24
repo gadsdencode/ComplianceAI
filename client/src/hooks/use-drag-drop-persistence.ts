@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { UserDocument } from '@/types';
-import { persistCache, checkCacheState, checkLocalStorage } from '@/lib/cache-utils';
 
 interface DragDropPersistenceOptions {
   onSuccess?: () => void;
@@ -24,12 +23,6 @@ export const useDragDropPersistence = (options: DragDropPersistenceOptions = {})
         console.log('⚠️ Document already in target category, skipping move');
         return;
       }
-
-      // Check initial cache and localStorage state
-      console.log('🔍 Initial cache state:');
-      checkCacheState();
-      console.log('🔍 Initial localStorage state:');
-      checkLocalStorage();
 
       // Optimistic update: Update the cache immediately
       queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
@@ -74,29 +67,6 @@ export const useDragDropPersistence = (options: DragDropPersistenceOptions = {})
         return finalData;
       });
 
-      // Force cache persistence
-      console.log('💾 Forcing cache persistence...');
-      await persistCache();
-
-      // Also invalidate related queries to ensure everything is in sync
-      console.log('🔄 Invalidating related queries...');
-      await Promise.all([
-        queryClient.invalidateQueries({ 
-          queryKey: ['/api/user-documents'],
-          refetchType: 'active'
-        }),
-        queryClient.invalidateQueries({ 
-          queryKey: ['/api/user-documents/folders'],
-          refetchType: 'active'
-        })
-      ]);
-
-      // Check final cache and localStorage state
-      console.log('🔍 Final cache state:');
-      checkCacheState();
-      console.log('🔍 Final localStorage state:');
-      checkLocalStorage();
-
       options.onSuccess?.();
       console.log('✅ Document move completed successfully');
 
@@ -104,7 +74,7 @@ export const useDragDropPersistence = (options: DragDropPersistenceOptions = {})
       console.error('❌ Error moving document:', error);
       
       // Rollback optimistic update on error
-      console.log('🔄 Rolling back optimistic update...');
+      console.log('🔄 Rolling back optimistic update due to error...');
       queryClient.invalidateQueries({ 
         queryKey: ['/api/user-documents'],
         refetchType: 'active'

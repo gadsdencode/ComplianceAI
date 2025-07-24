@@ -11,7 +11,15 @@ export const persistCache = async () => {
     queryClient.setQueryData(['cache-persistence-trigger'], { timestamp: Date.now() });
     
     // Wait a bit for the persistence to happen
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Verify persistence by checking localStorage
+    const localStorageData = checkLocalStorage();
+    if (localStorageData) {
+      console.log('✅ Cache persistence verified in localStorage');
+    } else {
+      console.log('⚠️ Cache persistence not found in localStorage');
+    }
     
     console.log('✅ Cache persistence triggered');
   } catch (error) {
@@ -28,7 +36,9 @@ export const checkCacheState = () => {
       key: q.queryKey,
       status: q.state.status,
       dataUpdatedAt: q.state.dataUpdatedAt,
-      hasData: !!q.state.data
+      hasData: !!q.state.data,
+      isStale: q.isStale(),
+      isFetching: q.state.fetchStatus === 'fetching'
     }))
   });
   return queries;
@@ -54,7 +64,8 @@ export const checkLocalStorage = () => {
       console.log('📦 localStorage cache found:', {
         key: cacheKey,
         size: cached.length,
-        data: parsed
+        queryCount: Object.keys(parsed.queries || {}).length,
+        timestamp: parsed.timestamp
       });
       return parsed;
     } catch (error) {
@@ -64,5 +75,27 @@ export const checkLocalStorage = () => {
   } else {
     console.log('📦 No localStorage cache found for key:', cacheKey);
     return null;
+  }
+};
+
+// Utility to manually persist specific queries
+export const persistSpecificQueries = async (queryKeys: string[][]) => {
+  try {
+    console.log('💾 Manually persisting specific queries:', queryKeys);
+    
+    // Force updates to trigger persistence
+    queryKeys.forEach(queryKey => {
+      const currentData = queryClient.getQueryData(queryKey);
+      if (currentData) {
+        queryClient.setQueryData(queryKey, currentData);
+      }
+    });
+    
+    // Wait for persistence
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('✅ Specific queries persisted');
+  } catch (error) {
+    console.error('❌ Error persisting specific queries:', error);
   }
 }; 
