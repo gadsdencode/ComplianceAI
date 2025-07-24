@@ -10,12 +10,10 @@ import {
 } from "../shared/schema.js";
 import { aiService } from "./ai-service.js";
 import OpenAI from "openai";
-import { Client as ObjectStorageClient } from "@replit/object-storage";
+import { Client } from "@replit/object-storage";
 import dotenv from "dotenv";
 // @ts-ignore: multer has no types in tsconfig
 import multer from 'multer';
-// @ts-ignore: object-storage types are present but skipLibCheck may hide them
-import { Client } from '@replit/object-storage';
 // @ts-ignore: mime-types has no types in tsconfig
 import mime from 'mime-types';
 import fs from 'fs';
@@ -44,11 +42,12 @@ const isReplitEnvironment = !!(
   process.env.FORCE_REPLIT_STORAGE === 'true'
 );
 
-// Create appropriate storage client based on environment
-let objectClient: any;
+// Create a single Replit Object Storage client instance
+let objectClient: Client | null = null;
 
 if (isReplitEnvironment) {
   // Use real Replit Object Storage in Replit environment
+  console.log("🚀 Using real Replit Object Storage");
   objectClient = new Client();
 } else {
   // Create a development-compatible mock for local development
@@ -58,25 +57,25 @@ if (isReplitEnvironment) {
   class DevelopmentObjectClient {
     private storage: Map<string, Buffer> = new Map();
     
-    async uploadFromBytes(key: string, data: Buffer): Promise<any> {
-      this.storage.set(key, data);
-      console.log(`📁 Mock upload: ${key} (${data.length} bytes)`);
+    async uploadFromBytes(objectName: string, data: Buffer): Promise<{ ok: boolean; error?: any }> {
+      this.storage.set(objectName, data);
+      console.log(`📁 Mock upload: ${objectName} (${data.length} bytes)`);
       return { ok: true };
     }
     
-    async exists(key: string): Promise<any> {
-      const exists = this.storage.has(key);
-      console.log(`🔍 Mock exists check: ${key} = ${exists}`);
+    async exists(objectName: string): Promise<{ ok: boolean; value: boolean; error?: any }> {
+      const exists = this.storage.has(objectName);
+      console.log(`🔍 Mock exists check: ${objectName} = ${exists}`);
       return { ok: true, value: exists };
     }
     
-    async delete(key: string): Promise<any> {
-      const existed = this.storage.delete(key);
-      console.log(`🗑️ Mock delete: ${key} (existed: ${existed})`);
+    async delete(objectName: string): Promise<{ ok: boolean; error?: any }> {
+      const existed = this.storage.delete(objectName);
+      console.log(`🗑️ Mock delete: ${objectName} (existed: ${existed})`);
       return { ok: true };
     }
     
-    async list(options: { prefix: string }): Promise<any> {
+    async list(options: { prefix: string }): Promise<{ ok: boolean; value: any[]; error?: any }> {
       const results = Array.from(this.storage.keys())
         .filter(key => key.startsWith(options.prefix))
         .map(name => ({ name }));
@@ -84,9 +83,9 @@ if (isReplitEnvironment) {
       return { ok: true, value: results };
     }
     
-    downloadAsStream(key: string): any {
-      const data = this.storage.get(key) || Buffer.from('');
-      console.log(`⬇️ Mock download stream: ${key} (${data.length} bytes)`);
+    downloadAsStream(objectName: string): any {
+      const data = this.storage.get(objectName) || Buffer.from('');
+      console.log(`⬇️ Mock download stream: ${objectName} (${data.length} bytes)`);
       
       const Readable = require('stream').Readable;
       const stream = new Readable();
@@ -96,7 +95,7 @@ if (isReplitEnvironment) {
     }
   }
   
-  objectClient = new DevelopmentObjectClient();
+  objectClient = new DevelopmentObjectClient() as any;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1588,7 +1587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let objectStorage: any;
         
         if (isReplitEnvironment) {
-          objectStorage = new ObjectStorageClient({
+          objectStorage = new Client({
             bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
           });
         } else {
@@ -1678,18 +1677,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      // Use appropriate storage client based on environment
-      let storageClient: any;
-      
-      if (isReplitEnvironment) {
-        // Use real ObjectStorageClient in Replit environment
-        storageClient = new ObjectStorageClient({
-          bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-        });
-      } else {
-        // Use the same mock client as document attachments for consistency
-        storageClient = objectClient;
+      // Use the global object storage client
+      if (!objectClient) {
+        console.error("❌ Object storage client not initialized");
+        return res.status(500).json({ message: "Storage service not available" });
       }
+      
+      const storageClient = objectClient;
       
       // Check if file exists in storage (EXACTLY like the working document files endpoint)
       console.log(`🔍 Checking if file exists in object storage: ${document.fileUrl}`);
@@ -1796,7 +1790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (isReplitEnvironment) {
           console.log(`Using real Object Storage client with bucket ID: ${REPLIT_OBJECT_STORAGE_BUCKET_ID}`);
-          objectStorage = new ObjectStorageClient({
+          objectStorage = new Client({
             bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
           });
         } else {
@@ -1969,7 +1963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let objectStorage: any;
           
           if (isReplitEnvironment) {
-            objectStorage = new ObjectStorageClient({
+            objectStorage = new Client({
               bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
             });
           } else {
@@ -2094,61 +2088,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
-    });
-
-  // Diagnostic endpoint to check file storage status
-  app.get("/api/user-documents/:id/storage-status", async (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    
-    try {
-      const documentId = parseInt(req.params.id);
-      
-      // Get document metadata
-      const document = await storage.getUserDocument(documentId);
-      
-      if (!document) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-      
-      // Ensure user can only access their own files
-      if (document.userId !== req.user.id) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      
-      // Use appropriate storage client based on environment
-      let storageClient: any;
-      
-             if (isReplitEnvironment) {
-         storageClient = new ObjectStorageClient({
-           bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-         });
-      } else {
-        storageClient = objectClient;
-      }
-      
-      // Check if file exists in storage
-      const existsResult = await storageClient.exists(document.fileUrl);
-      
-      const status = {
-        documentId: document.id,
-        fileName: document.fileName,
-        fileUrl: document.fileUrl,
-        fileSize: document.fileSize,
-        createdAt: document.createdAt,
-        storageEnvironment: isReplitEnvironment ? 'production' : 'development',
-        objectStorageExists: existsResult.ok ? existsResult.value : false,
-        objectStorageError: !existsResult.ok ? existsResult.error : null
-      };
-      
-      res.json(status);
-    } catch (error: any) {
-      res.status(500).json({ 
-        message: "Error checking storage status", 
-        error: error.message 
-      });
-    }
   });
 
   app.patch("/api/user-documents/:id", async (req: Request, res: Response) => {
@@ -2265,20 +2204,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Delete from object storage if it exists
-      if (document.fileUrl) {
+      if (document.fileUrl && objectClient) {
         try {
-          let objectStorage: any;
-          
-          if (isReplitEnvironment) {
-            objectStorage = new ObjectStorageClient({
-              bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-            });
-          } else {
-            objectStorage = objectClient;
-          }
-          
           // Delete the file from storage
-          await objectStorage.delete(document.fileUrl);
+          await objectClient.delete(document.fileUrl);
         } catch (storageError) {
           console.error("Error deleting file from storage:", storageError);
           // Continue with deletion even if storage deletion fails
