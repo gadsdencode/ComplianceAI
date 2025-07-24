@@ -473,19 +473,55 @@ const ComplianceWorkspace: React.FC = () => {
     }
   }, []);
 
+  // Ensure proper query cache initialization
+  useEffect(() => {
+    // Prefetch the queries to ensure they're available
+    queryClient.prefetchQuery({
+      queryKey: ['/api/user-documents'],
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+    
+    queryClient.prefetchQuery({
+      queryKey: ['/api/user-documents/folders'],
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+
+    // Cleanup function to ensure proper cache management
+    return () => {
+      // Optionally remove specific queries from cache on unmount
+      // This can help prevent stale data when navigating away and back
+      queryClient.removeQueries({
+        queryKey: ['/api/user-documents'],
+        exact: true,
+      });
+    };
+  }, [queryClient]);
+
   // Fetch user documents
   const { data: userDocuments, isLoading: isLoadingUserDocs, dataUpdatedAt: userDocsUpdatedAt } = useQuery<UserDocument[]>({
     queryKey: ['/api/user-documents'],
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes (formerly cacheTime)
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   // Fetch compliance documents
   const { data: complianceDocuments, isLoading: isLoadingComplianceDocs } = useQuery<Document[]>({
     queryKey: ['/api/documents'],
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   // Fetch user document folders
   const { data: folders, isLoading: isLoadingFolders, dataUpdatedAt: foldersUpdatedAt } = useQuery<any[]>({
     queryKey: ['/api/user-documents/folders'],
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   // Debug logging for data changes
@@ -1069,18 +1105,43 @@ const ComplianceWorkspace: React.FC = () => {
       if (currentCategory === targetFolderName) {
         return;
       }
-      
+
+      // Optimistic update: Update the cache immediately
+      queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map(doc => 
+          doc.id === documentId 
+            ? { ...doc, category: targetFolderName, updatedAt: new Date().toISOString() }
+            : doc
+        );
+      });
+
       // Update the document's category using the existing PATCH endpoint
       await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
         category: targetFolderName 
       });
       
-      // Refresh the queries to update the UI
-      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      // Ensure the cache is properly updated with the server response
+      await queryClient.invalidateQueries({ 
+        queryKey: ['/api/user-documents'],
+        refetchType: 'active'
+      });
+      
+      // Also invalidate folders to ensure folder counts are updated
+      await queryClient.invalidateQueries({ 
+        queryKey: ['/api/user-documents/folders'],
+        refetchType: 'active'
+      });
       
     } catch (error) {
       console.error('Error moving document:', error);
+      
+      // Rollback optimistic update on error
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/user-documents'],
+        refetchType: 'active'
+      });
+      
       throw error;
     }
   };
@@ -1238,6 +1299,16 @@ const ComplianceWorkspace: React.FC = () => {
               currentCategory: currentCategory
             });
             
+            // Optimistic update: Update the cache immediately
+            queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
+              if (!oldData) return oldData;
+              return oldData.map(doc => 
+                doc.id === actualDocumentId 
+                  ? { ...doc, category: targetFolderName, updatedAt: new Date().toISOString() }
+                  : doc
+              );
+            });
+            
             // DEBUG: Log pre-move state
             console.log('🔍 PRE-MOVE DEBUG STATE:', {
               userDocumentsBefore: userDocuments?.map(doc => ({
@@ -1258,43 +1329,19 @@ const ComplianceWorkspace: React.FC = () => {
             
             // DEBUG: Parse and log the response data
             const responseData = await response.json();
-            console.log('📊 PARSED API RESPONSE:', {
-              documentId: responseData.id,
-              title: responseData.title,
-              oldCategory: currentCategory,
-              newCategory: responseData.category,
-              updatedAt: responseData.updatedAt,
-              wasSuccessful: responseData.category === targetFolderName
+            console.log('✅ Document move API response data:', responseData);
+            
+            // Ensure the cache is properly updated with the server response
+            await queryClient.invalidateQueries({ 
+              queryKey: ['/api/user-documents'],
+              refetchType: 'active'
             });
             
-            // More aggressive query invalidation to ensure UI updates
-            console.log('🔄 Invalidating queries for UI refresh...');
-            
-            // Invalidate multiple related queries to ensure complete refresh
-            await Promise.all([
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents'],
-                refetchType: 'all' // Force refetch even if stale time hasn't expired
-              }),
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents/folders'],
-                refetchType: 'all' // Force refetch even if stale time hasn't expired
-              }),
-              // Also invalidate with exact matching to catch any cache variations
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents'], 
-                exact: false,
-                refetchType: 'all'
-              })
-            ]);
-            
-            // Force a refetch of the specific queries we use
-            await Promise.all([
-              queryClient.refetchQueries({ queryKey: ['/api/user-documents'] }),
-              queryClient.refetchQueries({ queryKey: ['/api/user-documents/folders'] })
-            ]);
-            
-            console.log('✅ Query invalidation completed');
+            // Also invalidate folders to ensure folder counts are updated
+            await queryClient.invalidateQueries({ 
+              queryKey: ['/api/user-documents/folders'],
+              refetchType: 'active'
+            });
             
             // DEBUG: Add a small delay and then log post-move state
             setTimeout(() => {
@@ -1325,6 +1372,13 @@ const ComplianceWorkspace: React.FC = () => {
               targetCategory: targetFolderName,
               response: apiError.response?.data
             });
+            
+            // Rollback optimistic update on error
+            queryClient.invalidateQueries({ 
+              queryKey: ['/api/user-documents'],
+              refetchType: 'active'
+            });
+            
             throw new Error(`Failed to move document: ${apiError.message || 'Unknown API error'}`);
           }
         }
@@ -1338,18 +1392,10 @@ const ComplianceWorkspace: React.FC = () => {
       });
       
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Move operation failed:', {
-        error,
-        itemId,
-        targetFolderId,
-        sourceNodeId,
-        errorMessage
-      });
-      
+      console.error('❌ Error in handleMoveToFolder:', error);
       toast({
         title: "Move Failed",
-        description: `Failed to move item: ${errorMessage}`,
+        description: error instanceof Error ? error.message : "Failed to move item. Please try again.",
         variant: "destructive",
       });
     }
