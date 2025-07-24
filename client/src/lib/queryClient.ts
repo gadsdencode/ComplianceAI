@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -41,15 +42,23 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// Create a persister for localStorage
+export const persister = createSyncStoragePersister({
+  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  key: 'compliance-ai-query-cache', // Unique key for this app
+  serialize: data => JSON.stringify(data),
+  deserialize: data => JSON.parse(data),
+});
+
+// Create the query client
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      // CRITICAL FIX: Remove staleTime: Infinity to allow invalidated queries to refetch
-      // staleTime: Infinity, // This was preventing invalidated queries from refetching!
-      staleTime: 5 * 60 * 1000, // 5 minutes - reasonable stale time that still allows invalidation
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
       retry: false,
     },
     mutations: {

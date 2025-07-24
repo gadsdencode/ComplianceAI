@@ -485,16 +485,6 @@ const ComplianceWorkspace: React.FC = () => {
       queryKey: ['/api/user-documents/folders'],
       staleTime: 1000 * 60 * 5, // 5 minutes
     });
-
-    // Cleanup function to ensure proper cache management
-    return () => {
-      // Optionally remove specific queries from cache on unmount
-      // This can help prevent stale data when navigating away and back
-      queryClient.removeQueries({
-        queryKey: ['/api/user-documents'],
-        exact: true,
-      });
-    };
   }, [queryClient]);
 
   // Fetch user documents
@@ -1117,21 +1107,34 @@ const ComplianceWorkspace: React.FC = () => {
       });
 
       // Update the document's category using the existing PATCH endpoint
-      await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
+      const response = await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
         category: targetFolderName 
       });
       
-      // Ensure the cache is properly updated with the server response
-      await queryClient.invalidateQueries({ 
-        queryKey: ['/api/user-documents'],
-        refetchType: 'active'
+      // Get the updated document from the response
+      const updatedDocument = await response.json();
+
+      // Update the cache with the server response to ensure consistency
+      queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map(doc => 
+          doc.id === documentId 
+            ? { ...doc, ...updatedDocument }
+            : doc
+        );
       });
       
-      // Also invalidate folders to ensure folder counts are updated
-      await queryClient.invalidateQueries({ 
-        queryKey: ['/api/user-documents/folders'],
-        refetchType: 'active'
-      });
+      // Also invalidate related queries to ensure everything is in sync
+      await Promise.all([
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/user-documents'],
+          refetchType: 'active'
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/user-documents/folders'],
+          refetchType: 'active'
+        })
+      ]);
       
     } catch (error) {
       console.error('Error moving document:', error);
@@ -1217,6 +1220,11 @@ const ComplianceWorkspace: React.FC = () => {
   };
 
   const handleMoveToFolder = async (itemId: string, targetFolderId: string, sourceNodeId: string) => {
+    // Declare variables at the top of the function to ensure they're available throughout
+    let targetFolderName: string;
+    let isMovingFolder: boolean;
+    let itemName: string;
+    
     try {
       // Find the target folder for better user feedback
       const targetFolder = fileNodes.find(folder => 
@@ -1230,7 +1238,7 @@ const ComplianceWorkspace: React.FC = () => {
         throw new Error('Target folder not found');
       }
       
-      const targetFolderName = targetFolder.name;
+      targetFolderName = targetFolder.name;
       
       // Determine if we're moving a document or a folder
       const sourceNode = fileNodes.flatMap(folder => [folder, ...(folder.children || [])])
@@ -1241,8 +1249,8 @@ const ComplianceWorkspace: React.FC = () => {
         throw new Error('Source item not found');
       }
       
-      const isMovingFolder = sourceNode.type === 'folder';
-      const itemName = sourceNode.name;
+      isMovingFolder = sourceNode.type === 'folder';
+      itemName = sourceNode.name;
       
       console.log('🔄 Move operation details:', {
         itemId,
@@ -1327,21 +1335,31 @@ const ComplianceWorkspace: React.FC = () => {
             
             console.log('✅ Document move API response:', response);
             
-            // DEBUG: Parse and log the response data
-            const responseData = await response.json();
-            console.log('✅ Document move API response data:', responseData);
+            // Get the updated document from the response
+            const updatedDocument = await response.json();
+            console.log('✅ Document move API response data:', updatedDocument);
             
-            // Ensure the cache is properly updated with the server response
-            await queryClient.invalidateQueries({ 
-              queryKey: ['/api/user-documents'],
-              refetchType: 'active'
+            // Update the cache with the server response to ensure consistency
+            queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
+              if (!oldData) return oldData;
+              return oldData.map(doc => 
+                doc.id === actualDocumentId 
+                  ? { ...doc, ...updatedDocument }
+                  : doc
+              );
             });
             
-            // Also invalidate folders to ensure folder counts are updated
-            await queryClient.invalidateQueries({ 
-              queryKey: ['/api/user-documents/folders'],
-              refetchType: 'active'
-            });
+            // Also invalidate related queries to ensure everything is in sync
+            await Promise.all([
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents'],
+                refetchType: 'active'
+              }),
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents/folders'],
+                refetchType: 'active'
+              })
+            ]);
             
             // DEBUG: Add a small delay and then log post-move state
             setTimeout(() => {

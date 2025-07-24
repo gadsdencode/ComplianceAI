@@ -45,17 +45,30 @@ export const useDragDropPersistence = (options: DragDropPersistenceOptions = {})
         throw new Error(`Failed to move document: ${response.statusText}`);
       }
 
-      // Ensure the cache is properly updated with the server response
-      await queryClient.invalidateQueries({ 
-        queryKey: ['/api/user-documents'],
-        refetchType: 'active'
+      // Get the updated document from the response
+      const updatedDocument = await response.json();
+
+      // Update the cache with the server response to ensure consistency
+      queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map(doc => 
+          doc.id === documentId 
+            ? { ...doc, ...updatedDocument }
+            : doc
+        );
       });
-      
-      // Also invalidate folders to ensure folder counts are updated
-      await queryClient.invalidateQueries({ 
-        queryKey: ['/api/user-documents/folders'],
-        refetchType: 'active'
-      });
+
+      // Also invalidate related queries to ensure everything is in sync
+      await Promise.all([
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/user-documents'],
+          refetchType: 'active'
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/user-documents/folders'],
+          refetchType: 'active'
+        })
+      ]);
 
       options.onSuccess?.();
 
