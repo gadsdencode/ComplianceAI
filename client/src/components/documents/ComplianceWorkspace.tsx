@@ -1096,53 +1096,61 @@ const ComplianceWorkspace: React.FC = () => {
         return;
       }
 
-      // Optimistic update: Update the cache immediately
-      queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
-        if (!oldData) return oldData;
-        return oldData.map(doc => 
-          doc.id === documentId 
-            ? { ...doc, category: targetFolderName, updatedAt: new Date().toISOString() }
-            : doc
-        );
+      console.log('🔄 Starting document move operation:', {
+        documentId,
+        currentCategory,
+        targetFolderName,
+        timestamp: new Date().toISOString()
       });
 
-      // Update the document's category using the existing PATCH endpoint
+      // Step 1: Make the API call first (no optimistic update to avoid race conditions)
+      console.log('📡 Making API call to update document category...');
       const response = await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
         category: targetFolderName 
       });
       
-      // Get the updated document from the response
+      // Step 2: Get the updated document from the response
       const updatedDocument = await response.json();
+      console.log('✅ API response received:', updatedDocument);
 
-      // Update the cache with the server response to ensure consistency
+      // Step 3: Update the cache with the server response
       queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
         if (!oldData) return oldData;
-        return oldData.map(doc => 
+        const updatedData = oldData.map(doc => 
           doc.id === documentId 
             ? { ...doc, ...updatedDocument }
             : doc
         );
+        console.log('🔄 Cache updated with server response:', {
+          documentId,
+          newCategory: updatedDocument.category,
+          totalDocuments: updatedData.length
+        });
+        return updatedData;
       });
       
-      // Also invalidate related queries to ensure everything is in sync
+      // Step 4: Invalidate all related queries to ensure consistency
+      console.log('🔄 Invalidating related queries...');
       await Promise.all([
         queryClient.invalidateQueries({ 
           queryKey: ['/api/user-documents'],
-          refetchType: 'active'
+          refetchType: 'all' // Force refetch all queries with this key
         }),
         queryClient.invalidateQueries({ 
           queryKey: ['/api/user-documents/folders'],
-          refetchType: 'active'
+          refetchType: 'all' // Force refetch all queries with this key
         })
       ]);
       
-    } catch (error) {
-      console.error('Error moving document:', error);
+      console.log('✅ Document move operation completed successfully');
       
-      // Rollback optimistic update on error
+    } catch (error) {
+      console.error('❌ Error moving document:', error);
+      
+      // On error, invalidate queries to refresh from server
       queryClient.invalidateQueries({ 
         queryKey: ['/api/user-documents'],
-        refetchType: 'active'
+        refetchType: 'all'
       });
       
       throw error;
@@ -1313,56 +1321,46 @@ const ComplianceWorkspace: React.FC = () => {
               currentCategory: currentCategory
             });
             
-            // Optimistic update: Update the cache immediately
-            queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
-              if (!oldData) return oldData;
-              return oldData.map(doc => 
-                doc.id === actualDocumentId 
-                  ? { ...doc, category: targetFolderName, updatedAt: new Date().toISOString() }
-                  : doc
-              );
-            });
-            
-            // DEBUG: Log pre-move state
-            console.log('🔍 PRE-MOVE DEBUG STATE:', {
-              userDocumentsBefore: userDocuments?.map(doc => ({
-                id: doc.id,
-                title: doc.title,
-                category: doc.category,
-                updatedAt: doc.updatedAt
-              })) || [],
-              foldersBefore: folders?.map(f => ({ id: f.id, name: f.name })) || []
-            });
-            
-            // Make the API call to update the document's category
+            // Step 1: Make the API call first (no optimistic update to avoid race conditions)
+            console.log('📡 Making API call to update document category...');
             const response = await apiRequest('PATCH', `/api/user-documents/${actualDocumentId}`, { 
               category: targetFolderName 
             });
             
             console.log('✅ Document move API response:', response);
             
-            // Get the updated document from the response
+            // Step 2: Get the updated document from the response
             const updatedDocument = await response.json();
             console.log('✅ Document move API response data:', updatedDocument);
             
-            // Update the cache with the server response to ensure consistency
+            // Step 3: Update the cache with the server response
             queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
               if (!oldData) return oldData;
-              return oldData.map(doc => 
+              const updatedData = oldData.map(doc => 
                 doc.id === actualDocumentId 
                   ? { ...doc, ...updatedDocument }
                   : doc
               );
+              console.log('🔄 Cache updated with server response:', {
+                documentId: actualDocumentId,
+                newCategory: updatedDocument.category,
+                totalDocuments: updatedData.length
+              });
+              return updatedData;
             });
             
-            // Success feedback
-            toast({
-              title: "Document Moved Successfully",
-              description: `"${itemName}" has been moved to ${targetFolderName}.`,
-            });
-            
-            console.log('✅ Document move completed successfully');
-            return;
+            // Step 4: Invalidate all related queries to ensure consistency
+            console.log('🔄 Invalidating related queries...');
+            await Promise.all([
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents'],
+                refetchType: 'all'
+              }),
+              queryClient.invalidateQueries({ 
+                queryKey: ['/api/user-documents/folders'],
+                refetchType: 'all'
+              })
+            ]);
             
             // Success feedback
             toast({

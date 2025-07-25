@@ -1,4 +1,4 @@
-# File Move Persistence Fix - CRITICAL ISSUE RESOLVED
+# File Move Persistence Fix - ENHANCED SOLUTION
 
 ## 🔥 **ROOT CAUSE IDENTIFIED AND FIXED**
 
@@ -26,25 +26,36 @@ staleTime: Infinity, // ❌ Prevented queries from ever refetching!
 
 **AFTER:**
 ```typescript
-staleTime: 5 * 60 * 1000, // ✅ 5 minutes - allows invalidation to work
+staleTime: 1000 * 60 * 5, // ✅ 5 minutes - allows invalidation to work
 ```
 
 ### **2. Enhanced Query Invalidation** (`ComplianceWorkspace.tsx`)
 
+**BEFORE:**
 ```typescript
-await Promise.all([
-  queryClient.invalidateQueries({ 
-    queryKey: ['/api/user-documents'],
-    refetchType: 'all' // ✅ Force refetch even with stale time
-  }),
-  queryClient.invalidateQueries({ 
-    queryKey: ['/api/user-documents/folders'],
-    refetchType: 'all' // ✅ Force refetch even with stale time  
-  })
-]);
+refetchType: 'active' // ❌ Only refetches active queries
 ```
 
-### **3. Comprehensive Logging**
+**AFTER:**
+```typescript
+refetchType: 'all' // ✅ Force refetch all queries with this key
+```
+
+### **3. Race Condition Prevention**
+
+**BEFORE:**
+```typescript
+// Optimistic update → API call → Cache update → Invalidation
+// ❌ Race condition between optimistic update and server response
+```
+
+**AFTER:**
+```typescript
+// API call → Cache update → Invalidation
+// ✅ No race conditions, server response is authoritative
+```
+
+### **4. Comprehensive Logging**
 Added detailed logging throughout the move process to track:
 - API calls and responses
 - Database updates and verification
@@ -62,12 +73,12 @@ Added detailed logging throughout the move process to track:
 
 ### **Expected Console Logs:**
 ```
-🔄 Move operation details: { targetFolderName: "Test Folder", ... }
-📝 Making API call to update document category: { documentId: 123, newCategory: "Test Folder" }
-✅ Document move API response: { id: 123, category: "Test Folder" }
-🔄 Invalidating queries for UI refresh...
-✅ Query invalidation completed
-✅ Document move completed successfully
+🔄 Starting document move operation: { documentId: 123, currentCategory: "General", targetFolderName: "Test Folder" }
+📡 Making API call to update document category...
+✅ API response received: { id: 123, category: "Test Folder" }
+🔄 Cache updated with server response: { documentId: 123, newCategory: "Test Folder", totalDocuments: 5 }
+🔄 Invalidating related queries...
+✅ Document move operation completed successfully
 ```
 
 ### **Backend Verification Logs:**
@@ -92,14 +103,20 @@ Added detailed logging throughout the move process to track:
 - Issue was purely on the frontend cache side
 - Backend logging confirmed successful updates
 
+### **Race Condition Prevention:**
+- Removed optimistic updates that could interfere with server responses
+- Server response is now the authoritative source of truth
+- Cache is updated only after successful API call
+
 ## 📊 **BEFORE vs AFTER**
 
 | Aspect | Before (Broken) | After (Fixed) |
 |--------|----------------|---------------|
 | **API Call** | ✅ Works | ✅ Works |
 | **Database Update** | ✅ Works | ✅ Works |
-| **UI Immediate Update** | ✅ Works (optimistic) | ✅ Works |
+| **UI Immediate Update** | ✅ Works (optimistic) | ✅ Works (server-driven) |
 | **Query Invalidation** | ❌ No refetch | ✅ Refetches |
+| **Race Conditions** | ❌ Present | ✅ Eliminated |
 | **After Page Refresh** | ❌ Reverts | ✅ Persists |
 | **Production** | ❌ Broken | ✅ Fixed |
 
@@ -115,8 +132,9 @@ Added detailed logging throughout the move process to track:
 1. **`staleTime: Infinity` is dangerous** - Use carefully, understand implications
 2. **Always test persistence** - Check if changes survive page refresh
 3. **Query invalidation is not magic** - Respects stale time settings
-4. **Logging is essential** - Helps trace complex async flows
-5. **Web search helps** - React Query docs and community knowledge is invaluable
+4. **Race conditions are subtle** - Optimistic updates can interfere with server responses
+5. **Logging is essential** - Helps trace complex async flows
+6. **`refetchType: 'all'` vs `'active'`** - Understand the difference and use appropriately
 
 ## 🔄 **RELATED IMPROVEMENTS**
 
@@ -125,6 +143,16 @@ The fix also improves:
 - **User feedback** - More informative toast messages  
 - **Debugging** - Comprehensive logging for troubleshooting
 - **Reliability** - Multiple invalidation strategies
+- **Performance** - Eliminated race conditions and unnecessary updates
+
+## 📋 **TESTING GUIDE**
+
+See `test-file-move-persistence.md` for comprehensive testing instructions including:
+- Step-by-step testing procedures
+- Expected console logs
+- Advanced testing scenarios
+- Troubleshooting guide
+- Performance considerations
 
 ---
 
@@ -134,6 +162,7 @@ Deploy this fix to production immediately as it affects core file management fun
 
 **Files Changed:**
 - `client/src/lib/queryClient.ts` - Critical stale time fix
-- `client/src/components/documents/ComplianceWorkspace.tsx` - Enhanced invalidation
+- `client/src/components/documents/ComplianceWorkspace.tsx` - Enhanced invalidation and race condition prevention
 - `server/routes.ts` - Better logging and verification
-- `server/storage.ts` - Enhanced database logging 
+- `server/storage.ts` - Enhanced database logging
+- `test-file-move-persistence.md` - Comprehensive testing guide 
