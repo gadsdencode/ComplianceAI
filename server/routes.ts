@@ -1847,10 +1847,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         console.log("Attempting to upload file:", objectName);
+        
+        // Read file content from temp file path (express-fileupload with useTempFiles: true)
+        let fileData: Buffer;
+        if (uploadedFile.tempFilePath) {
+          // File is stored in temp location, read it
+          fileData = fs.readFileSync(uploadedFile.tempFilePath);
+          console.log(`📁 Read file from temp path: ${uploadedFile.tempFilePath} (${fileData.length} bytes)`);
+        } else if (uploadedFile.data) {
+          // File is in memory
+          fileData = uploadedFile.data;
+          console.log(`📁 Using file data from memory (${fileData.length} bytes)`);
+        } else {
+          throw new Error('No file data available - neither tempFilePath nor data property found');
+        }
+
         // Upload file to Object Storage
         const uploadResult = await objectStorage.uploadFromBytes(
           objectName, 
-          uploadedFile.data
+          fileData
         );
         
         if (!uploadResult.ok) {
@@ -1861,6 +1876,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: uploadResult.error,
             details: uploadResult
           });
+        }
+        
+        // Clean up temporary file if it exists
+        if (uploadedFile.tempFilePath) {
+          try {
+            fs.unlinkSync(uploadedFile.tempFilePath);
+            console.log(`🗑️ Cleaned up temp file: ${uploadedFile.tempFilePath}`);
+          } catch (cleanupError) {
+            console.warn(`⚠️ Failed to cleanup temp file: ${uploadedFile.tempFilePath}`, cleanupError);
+            // Don't fail the upload for cleanup errors
+          }
         }
         
         // Extract category from folder ID if provided
@@ -2014,10 +2040,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error('Object storage client not initialized');
           }
           
+          // Read file content from temp file path (express-fileupload with useTempFiles: true)
+          let fileData: Buffer;
+          if (file.tempFilePath) {
+            // File is stored in temp location, read it
+            fileData = fs.readFileSync(file.tempFilePath);
+            console.log(`📁 Read file from temp path: ${file.tempFilePath} (${fileData.length} bytes)`);
+          } else if (file.data) {
+            // File is in memory
+            fileData = file.data;
+            console.log(`📁 Using file data from memory (${fileData.length} bytes)`);
+          } else {
+            throw new Error('No file data available - neither tempFilePath nor data property found');
+          }
+
           // Upload file to Object Storage
           const uploadResult = await objectStorage.uploadFromBytes(
             objectName, 
-            file.data
+            fileData
           );
           
           if (!uploadResult.ok) {
@@ -2025,6 +2065,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           console.log(`✅ File uploaded to object storage: ${objectName}`);
+          
+          // Clean up temporary file if it exists
+          if (file.tempFilePath) {
+            try {
+              fs.unlinkSync(file.tempFilePath);
+              console.log(`🗑️ Cleaned up temp file: ${file.tempFilePath}`);
+            } catch (cleanupError) {
+              console.warn(`⚠️ Failed to cleanup temp file: ${file.tempFilePath}`, cleanupError);
+              // Don't fail the upload for cleanup errors
+            }
+          }
           
           // Verify the file was uploaded by checking if it exists
           const existsCheck = await objectStorage.exists(objectName);
