@@ -47,8 +47,10 @@ let objectClient: Client | null = null;
 
 if (isReplitEnvironment) {
   // Use real Replit Object Storage in Replit environment
-  console.log("🚀 Using real Replit Object Storage");
-  objectClient = new Client();
+  console.log(`🚀 Using real Replit Object Storage with bucket: ${REPLIT_OBJECT_STORAGE_BUCKET_ID}`);
+  objectClient = new Client({
+    bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+  });
 } else {
   // Create a development-compatible mock for local development
   console.log("⚠️  Running in development mode - using mock object storage");
@@ -1837,17 +1839,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const objectName = `${req.user.id}/${timestamp}-${sanitizedFileName}`;
       
       try {
-        // Use appropriate storage client based on environment
-        let objectStorage: any;
+        // Use the same global storage client for consistency with download
+        const objectStorage = objectClient;
         
-        if (isReplitEnvironment) {
-          console.log(`Using real Object Storage client with bucket ID: ${REPLIT_OBJECT_STORAGE_BUCKET_ID}`);
-          objectStorage = new Client({
-            bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-          });
-        } else {
-          console.log("Using development mock storage for file upload");
-          objectStorage = objectClient;
+        if (!objectStorage) {
+          throw new Error('Object storage client not initialized');
         }
         
         console.log("Attempting to upload file:", objectName);
@@ -2011,15 +2007,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
           const objectName = `${req.user.id}/${timestamp}-${index}-${sanitizedFileName}`;
           
-          // Use appropriate storage client based on environment
-          let objectStorage: any;
+          // Use the same global storage client for consistency with download
+          const objectStorage = objectClient;
           
-          if (isReplitEnvironment) {
-            objectStorage = new Client({
-              bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-            });
-          } else {
-            objectStorage = objectClient;
+          if (!objectStorage) {
+            throw new Error('Object storage client not initialized');
           }
           
           // Upload file to Object Storage
