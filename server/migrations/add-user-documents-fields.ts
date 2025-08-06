@@ -1,37 +1,74 @@
-import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { db } from "../db.js";
 
 export async function runMigration() {
   console.log("Running migration: Adding category, starred, and status fields to user_documents table");
   
-  await db.execute(sql`
-    -- Add new columns to user_documents table
-    ALTER TABLE user_documents 
-    ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'General',
-    ADD COLUMN IF NOT EXISTS starred BOOLEAN DEFAULT false,
-    ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+  try {
+    // Add category column
+    await db.execute(sql`
+      ALTER TABLE user_documents 
+      ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'General'
+    `);
 
-    -- Add constraint for status field
-    ALTER TABLE user_documents 
-    ADD CONSTRAINT user_documents_status_check 
-    CHECK (status IN ('draft', 'review', 'approved', 'archived'));
+    // Add starred column  
+    await db.execute(sql`
+      ALTER TABLE user_documents 
+      ADD COLUMN IF NOT EXISTS starred BOOLEAN DEFAULT false
+    `);
 
-    -- Add index for faster filtering by category and status
-    CREATE INDEX IF NOT EXISTS idx_user_documents_category ON user_documents(category);
-    CREATE INDEX IF NOT EXISTS idx_user_documents_status ON user_documents(status);
-    CREATE INDEX IF NOT EXISTS idx_user_documents_starred ON user_documents(starred);
+    // Add status column
+    await db.execute(sql`
+      ALTER TABLE user_documents 
+      ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft'
+    `);
 
-    -- Add comment
-    COMMENT ON COLUMN user_documents.category IS 'Document category for organization';
-    COMMENT ON COLUMN user_documents.starred IS 'Whether the document is starred/favorited';
-    COMMENT ON COLUMN user_documents.status IS 'Document workflow status';
-  `);
+    // Check if constraint already exists before adding it
+    const constraintExists = await db.execute(sql`
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE constraint_name = 'user_documents_status_check' 
+      AND table_name = 'user_documents'
+    `);
 
-  console.log("Migration completed: user_documents table updated with new fields");
+    if (constraintExists.rows.length === 0) {
+      await db.execute(sql`
+        ALTER TABLE user_documents 
+        ADD CONSTRAINT user_documents_status_check 
+        CHECK (status IN ('draft', 'review', 'approved', 'archived'))
+      `);
+    }
+
+    // Create indexes
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_user_documents_category ON user_documents(category)
+    `);
+
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_user_documents_status ON user_documents(status)
+    `);
+
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_user_documents_starred ON user_documents(starred)
+    `);
+
+    // Add comments
+    await db.execute(sql`
+      COMMENT ON COLUMN user_documents.category IS 'Document category for organization'
+    `);
+
+    await db.execute(sql`
+      COMMENT ON COLUMN user_documents.starred IS 'Whether the document is starred/favorited'
+    `);
+
+    await db.execute(sql`
+      COMMENT ON COLUMN user_documents.status IS 'Document workflow status'
+    `);
+
+    console.log("Migration completed: user_documents table updated with new fields");
+  } catch (error) {
+    console.error("Migration failed:", error);
+    throw error;
+  }
 }
 
-// Run the migration if this file is executed directly
-if (require.main === module) {
-  runMigration().catch(console.error);
-} 
+ 

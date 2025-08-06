@@ -1,4 +1,3 @@
-import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 
@@ -16,19 +15,18 @@ export async function runMigration() {
       file_size INTEGER NOT NULL,
       file_url TEXT NOT NULL,
       tags TEXT[],
-      category VARCHAR(100) DEFAULT 'General',
-      starred BOOLEAN DEFAULT false,
-      status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'review', 'approved', 'archived')),
       is_folder_placeholder BOOLEAN DEFAULT false,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    );
+    )
+  `);
 
-    -- Add index for faster queries when filtering by user
-    CREATE INDEX IF NOT EXISTS idx_user_documents_user_id ON user_documents(user_id);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_user_documents_user_id ON user_documents(user_id)
+  `);
 
-    -- Add comment
-    COMMENT ON TABLE user_documents IS 'Stores user-uploaded documents separate from compliance documents';
+  await db.execute(sql`
+    COMMENT ON TABLE user_documents IS 'Stores user-uploaded documents separate from compliance documents'
   `);
 
   console.log("Migration completed: user_documents table created");

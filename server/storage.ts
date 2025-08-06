@@ -13,6 +13,14 @@ import { pool } from "./db.js";
 
 const PostgresSessionStore = connectPg(session);
 
+// Detect Replit environment
+const isReplitEnvironment = !!(
+  process.env.REPL_ID || 
+  process.env.REPLIT_DB_URL || 
+  process.env.REPLIT_DEPLOYMENT || 
+  process.env.REPLIT_DOMAINS
+);
+
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
@@ -90,68 +98,83 @@ export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
   
   constructor() {
-    this.sessionStore = new PostgresSessionStore({ 
-      pool, 
-      createTableIfMissing: true 
-    });
+    // Use memory store for Replit environment to avoid PostgreSQL session table issues
+    if (isReplitEnvironment) {
+      console.log("🔄 Using memory session store for Replit environment");
+      this.sessionStore = new session.MemoryStore();
+    } else {
+      console.log("🔄 Using PostgreSQL session store for local development");
+      this.sessionStore = new PostgresSessionStore({ 
+        pool, 
+        createTableIfMissing: false  // Disable automatic table creation to prevent NeonDB errors
+      });
+    }
     
-    // Initialize default templates
-    this.initDefaultTemplates();
+    // Initialize default templates asynchronously and don't block startup
+    this.initDefaultTemplates().catch(error => {
+      console.warn("Failed to initialize default templates:", error);
+      // Don't throw error to prevent app startup failure
+    });
   }
   
   private async initDefaultTemplates() {
-    // Check if there are any templates
-    const existingTemplates = await db.select({ count: sql`count(*)` }).from(templates);
-    if (parseInt(existingTemplates[0].count as string) > 0) {
-      return; // Already have templates
-    }
-    
-    // Create admin user if it doesn't exist
-    let adminId = 1;
-    const adminUser = await this.getUserByUsername("admin@compliance.ai");
-    if (!adminUser) {
-      const admin = await this.createUser({
-        username: "admin@compliance.ai",
-        password: "$2b$10$zreNJHPZ4WEGkSVFX/l98eThME7E6gZl/lQPLiCnQnCY3s.x3EvFi", // hashed "admin123"
-        name: "System Admin",
-        email: "admin@compliance.ai",
-        role: "admin"
+    try {
+      // Check if there are any templates
+      const existingTemplates = await db.select({ count: sql`count(*)` }).from(templates);
+      if (parseInt(existingTemplates[0].count as string) > 0) {
+        return; // Already have templates
+      }
+      
+      // Create admin user if it doesn't exist
+      let adminId = 1;
+      const adminUser = await this.getUserByUsername("admin@compliance.ai");
+      if (!adminUser) {
+        const admin = await this.createUser({
+          username: "admin@compliance.ai",
+          password: "$2b$10$zreNJHPZ4WEGkSVFX/l98eThME7E6gZl/lQPLiCnQnCY3s.x3EvFi", // hashed "admin123"
+          name: "System Admin",
+          email: "admin@compliance.ai",
+          role: "admin"
+        });
+        adminId = admin.id;
+      }
+      
+      // Add default templates
+      await this.createTemplate({
+        name: "GDPR Compliance",
+        content: "# GDPR Compliance Statement\n\nThis document outlines how [Company Name] complies with GDPR regulations...",
+        category: "Privacy",
+        createdById: adminId,
+        isDefault: true
       });
-      adminId = admin.id;
+
+      await this.createTemplate({
+        name: "ISO 27001",
+        content: "# ISO 27001 Information Security Policy\n\n[Company Name] is committed to information security...",
+        category: "Security",
+        createdById: adminId,
+        isDefault: true
+      });
+
+      await this.createTemplate({
+        name: "PCI DSS",
+        content: "# PCI DSS Compliance Statement\n\n[Company Name] adheres to the Payment Card Industry Data Security Standard...",
+        category: "Financial",
+        createdById: adminId,
+        isDefault: true
+      });
+
+      await this.createTemplate({
+        name: "SOC 2",
+        content: "# SOC 2 Compliance Statement\n\n[Company Name] follows the Trust Services Criteria...",
+        category: "Security",
+        createdById: adminId,
+        isDefault: true
+      });
+    } catch (error) {
+      console.error("Error initializing default templates:", error);
+      // Don't re-throw to prevent app startup failure
     }
-    
-    // Add default templates
-    await this.createTemplate({
-      name: "GDPR Compliance",
-      content: "# GDPR Compliance Statement\n\nThis document outlines how [Company Name] complies with GDPR regulations...",
-      category: "Privacy",
-      createdById: adminId,
-      isDefault: true
-    });
-
-    await this.createTemplate({
-      name: "ISO 27001",
-      content: "# ISO 27001 Information Security Policy\n\n[Company Name] is committed to information security...",
-      category: "Security",
-      createdById: adminId,
-      isDefault: true
-    });
-
-    await this.createTemplate({
-      name: "PCI DSS",
-      content: "# PCI DSS Compliance Statement\n\n[Company Name] adheres to the Payment Card Industry Data Security Standard...",
-      category: "Financial",
-      createdById: adminId,
-      isDefault: true
-    });
-
-    await this.createTemplate({
-      name: "SOC 2",
-      content: "# SOC 2 Compliance Statement\n\n[Company Name] follows the Trust Services Criteria...",
-      category: "Security",
-      createdById: adminId,
-      isDefault: true
-    });
   }
   
   // User management
@@ -256,36 +279,56 @@ export class DatabaseStorage implements IStorage {
   }
   
   async updateDocument(id: number, data: Partial<InsertDocument>): Promise<Document | undefined> {
-    // Get the current document
-    const document = await this.getDocument(id);
-    if (!document) return undefined;
-    
-    // If content is changing, create a new version
-    if (data.content && data.content !== document.content) {
-      const newVersion = document.version + 1;
+    // Use explicit transaction to ensure the update is properly committed
+    return await db.transaction(async (tx) => {
+      // Get the current document
+      const [document] = await tx
+        .select()
+        .from(documents)
+        .where(eq(documents.id, id));
       
-      // Create a version record for the new content
-      await this.createDocumentVersion({
-        documentId: id,
-        version: newVersion,
-        content: data.content,
-        createdById: data.createdById || document.createdById
-      });
+      if (!document) {
+        throw new Error(`Document ${id} not found`);
+      }
       
-      data.version = newVersion;
-    }
-    
-    // Update the document with a new updatedAt timestamp
-    const [updatedDocument] = await db
-      .update(documents)
-      .set({
-        ...data,
-        updatedAt: new Date()
-      })
-      .where(eq(documents.id, id))
-      .returning();
+      // If content is changing, create a new version
+      if (data.content && data.content !== document.content) {
+        const newVersion = document.version + 1;
+        
+        // Create a version record for the new content
+        await tx
+          .insert(documentVersions)
+          .values({
+            documentId: id,
+            version: newVersion,
+            content: data.content,
+            createdById: data.createdById || document.createdById
+          });
+        
+        data.version = newVersion;
+      }
       
-    return updatedDocument;
+      // Update the document with a new updatedAt timestamp
+      const [updatedDocument] = await tx
+        .update(documents)
+        .set({
+          ...data,
+          updatedAt: new Date()
+        })
+        .where(eq(documents.id, id))
+        .returning();
+      
+      if (!updatedDocument) {
+        throw new Error(`Document ${id} update failed`);
+      }
+      
+      // Verify the update was applied correctly
+      if (data.category && updatedDocument.category !== data.category) {
+        throw new Error(`Category update failed: expected ${data.category}, got ${updatedDocument.category}`);
+      }
+      
+      return updatedDocument;
+    });
   }
   
   // Document versions
@@ -507,14 +550,20 @@ export class DatabaseStorage implements IStorage {
   }
   
   async updateUserDocument(id: number, data: Partial<InsertUserDocument>): Promise<UserDocument | undefined> {
-    try {
-      console.log(`🔄 Storage: Updating document ${id} with data:`, {
-        documentId: id,
-        updateData: data,
-        timestamp: new Date().toISOString()
-      });
+    // Use explicit transaction to ensure the update is properly committed
+    return await db.transaction(async (tx) => {
+      // Get the current document
+      const [currentDocument] = await tx
+        .select()
+        .from(userDocuments)
+        .where(eq(userDocuments.id, id));
       
-      const [updatedDocument] = await db
+      if (!currentDocument) {
+        throw new Error(`Document ${id} not found`);
+      }
+      
+      // Perform the update
+      const [updatedDocument] = await tx
         .update(userDocuments)
         .set({
           ...data,
@@ -523,28 +572,17 @@ export class DatabaseStorage implements IStorage {
         .where(eq(userDocuments.id, id))
         .returning();
       
-      if (updatedDocument) {
-        console.log(`✅ Storage: Document ${id} updated successfully:`, {
-          documentId: updatedDocument.id,
-          newCategory: updatedDocument.category,
-          newUpdatedAt: updatedDocument.updatedAt,
-          fieldsUpdated: Object.keys(data)
-        });
-      } else {
-        console.error(`❌ Storage: Document ${id} update returned no results`);
+      if (!updatedDocument) {
+        throw new Error(`Document ${id} update failed`);
+      }
+      
+      // Verify the update was applied correctly
+      if (data.category && updatedDocument.category !== data.category) {
+        throw new Error(`Category update failed: expected ${data.category}, got ${updatedDocument.category}`);
       }
       
       return updatedDocument;
-    } catch (error: any) {
-      console.error(`❌ Storage: Error updating document ${id}:`, {
-        documentId: id,
-        updateData: data,
-        error: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      });
-      throw error;
-    }
+    });
   }
   
   async deleteUserDocument(id: number): Promise<void> {

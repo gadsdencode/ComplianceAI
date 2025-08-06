@@ -473,20 +473,31 @@ const ComplianceWorkspace: React.FC = () => {
     }
   }, []);
 
-  // Fetch user documents
+  // Fetch user documents with aggressive refetching to prevent stale data
   const { data: userDocuments, isLoading: isLoadingUserDocs, dataUpdatedAt: userDocsUpdatedAt } = useQuery<UserDocument[]>({
     queryKey: ['/api/user-documents'],
+    staleTime: 0, // Always consider data stale to force refetch on invalidation
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when returning to the page
   });
 
-  // Fetch compliance documents
+  // Fetch compliance documents with aggressive refetching
   const { data: complianceDocuments, isLoading: isLoadingComplianceDocs } = useQuery<Document[]>({
     queryKey: ['/api/documents'],
+    staleTime: 0, // Always consider data stale
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when returning to the page
   });
 
-  // Fetch user document folders
+  // Fetch user document folders with aggressive refetching
   const { data: folders, isLoading: isLoadingFolders, dataUpdatedAt: foldersUpdatedAt } = useQuery<any[]>({
     queryKey: ['/api/user-documents/folders'],
+    staleTime: 0, // Always consider data stale
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when returning to the page
   });
+
+
 
   // Debug logging for data changes
   useEffect(() => {
@@ -874,7 +885,6 @@ const ComplianceWorkspace: React.FC = () => {
 
     // Ensure "General" folder always exists
     if (!Object.values(folderNodes).find(folder => folder.name === 'General')) {
-      console.log('📁 Creating default General folder');
       const generalFolderId = 'general-default';
       folderNodes[generalFolderId] = {
         id: `managed-folder-${generalFolderId}`,
@@ -883,6 +893,21 @@ const ComplianceWorkspace: React.FC = () => {
         children: [],
         modified: formatDate(new Date().toISOString()),
         folderId: generalFolderId,
+        documentCount: 0,
+        isManaged: true
+      };
+    }
+
+    // Ensure "Compliance" folder always exists for compliance documents
+    if (!Object.values(folderNodes).find(folder => folder.name === 'Compliance')) {
+      const complianceFolderId = 'compliance-default';
+      folderNodes[complianceFolderId] = {
+        id: `managed-folder-${complianceFolderId}`,
+        name: 'Compliance',
+        type: "folder",
+        children: [],
+        modified: formatDate(new Date().toISOString()),
+        folderId: complianceFolderId,
         documentCount: 0,
         isManaged: true
       };
@@ -898,7 +923,15 @@ const ComplianceWorkspace: React.FC = () => {
 
     // Process documents and assign them to managed folders
     allDocuments.forEach(doc => {
-      const category = ('category' in doc ? doc.category : 'Compliance') || 'General';
+      let category: string;
+      
+      if ('category' in doc) {
+        // User document - use database category
+        category = doc.category || 'General';
+      } else {
+        // Compliance document - use database category (now available)
+        category = (doc as any).category || 'Compliance';
+      }
       
       console.log('📄 Processing document:', {
         id: doc.id,
@@ -1057,6 +1090,8 @@ const ComplianceWorkspace: React.FC = () => {
 
   const handleMoveDocument = async (documentId: number, targetFolderId: string, currentCategory: string) => {
     try {
+      console.log('🔄 handleMoveDocument called:', { documentId, targetFolderId, currentCategory });
+      
       // Extract folder name from ID format: folder-{userId}-{folderName}
       const targetFolder = folders?.find(f => f.id === targetFolderId);
       if (!targetFolder) {
@@ -1067,20 +1102,32 @@ const ComplianceWorkspace: React.FC = () => {
       
       // Don't move if it's already in the target folder
       if (currentCategory === targetFolderName) {
+        console.log('📋 Document already in target folder, no move needed');
         return;
       }
       
       // Update the document's category using the existing PATCH endpoint
-      await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
+      const response = await apiRequest('PATCH', `/api/user-documents/${documentId}`, { 
         category: targetFolderName 
       });
       
-      // Refresh the queries to update the UI
-      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      // Parse the response to verify the update
+      const responseData = await response.json();
+      
+      // Verify the update was successful
+      if (responseData.category !== targetFolderName) {
+        throw new Error(`Category update failed: expected ${targetFolderName}, got ${responseData.category}`);
+      }
+      
+      // Invalidate and refetch queries to update the UI
+      await queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] });
+      
+      // Wait a brief moment to ensure queries have refetched
+      await new Promise(resolve => setTimeout(resolve, 100));
       
     } catch (error) {
-      console.error('Error moving document:', error);
+      console.error('❌ Error moving document:', error);
       throw error;
     }
   };
@@ -1204,13 +1251,10 @@ const ComplianceWorkspace: React.FC = () => {
             variant: "destructive",
           });
           return;
-        } else if (!isMovingFolder && sourceNode.document && 'userId' in sourceNode.document) {
-          // Moving a user document to a managed folder
-          console.log('🔄 Moving document to folder:', { 
-            documentId: itemId, 
-            targetCategory: targetFolderName,
-            sourceDocument: sourceNode.document 
-          });
+        } else if (!isMovingFolder && sourceNode.document) {
+          // Moving any document (user or compliance) to a managed folder
+          const isUserDocument = 'userId' in sourceNode.document;
+          const isComplianceDocument = !isUserDocument;
           
           try {
             // Show loading state
@@ -1219,9 +1263,8 @@ const ComplianceWorkspace: React.FC = () => {
               description: `Moving "${itemName}" to ${targetFolderName}...`,
             });
             
-            // Extract the actual document ID from the node ID format: "user-123" -> 123
             const actualDocumentId = sourceNode.document.id;
-            const currentCategory = sourceNode.document.category;
+            const currentCategory = 'category' in sourceNode.document ? sourceNode.document.category : 'Compliance';
             
             // Don't move if it's already in the target folder
             if (currentCategory === targetFolderName) {
@@ -1232,82 +1275,47 @@ const ComplianceWorkspace: React.FC = () => {
               return;
             }
             
-            console.log('📝 Making API call to update document category:', {
-              documentId: actualDocumentId,
-              newCategory: targetFolderName,
-              currentCategory: currentCategory
-            });
+            let response: Response;
             
-            // DEBUG: Log pre-move state
-            console.log('🔍 PRE-MOVE DEBUG STATE:', {
-              userDocumentsBefore: userDocuments?.map(doc => ({
-                id: doc.id,
-                title: doc.title,
-                category: doc.category,
-                updatedAt: doc.updatedAt
-              })) || [],
-              foldersBefore: folders?.map(f => ({ id: f.id, name: f.name })) || []
-            });
-            
-            // Make the API call to update the document's category
-            const response = await apiRequest('PATCH', `/api/user-documents/${actualDocumentId}`, { 
-              category: targetFolderName 
-            });
-            
-            console.log('✅ Document move API response:', response);
-            
-            // DEBUG: Parse and log the response data
-            const responseData = await response.json();
-            console.log('📊 PARSED API RESPONSE:', {
-              documentId: responseData.id,
-              title: responseData.title,
-              oldCategory: currentCategory,
-              newCategory: responseData.category,
-              updatedAt: responseData.updatedAt,
-              wasSuccessful: responseData.category === targetFolderName
-            });
-            
-            // More aggressive query invalidation to ensure UI updates
-            console.log('🔄 Invalidating queries for UI refresh...');
-            
-            // Invalidate multiple related queries to ensure complete refresh
+            if (isUserDocument) {
+              // Update user document category
+              response = await apiRequest('PATCH', `/api/user-documents/${actualDocumentId}`, { 
+                category: targetFolderName 
+              });
+              
+                          // Invalidate and refetch user document queries to ensure fresh data
             await Promise.all([
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents'],
-                refetchType: 'all' // Force refetch even if stale time hasn't expired
-              }),
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents/folders'],
-                refetchType: 'all' // Force refetch even if stale time hasn't expired
-              }),
-              // Also invalidate with exact matching to catch any cache variations
-              queryClient.invalidateQueries({ 
-                queryKey: ['/api/user-documents'], 
-                exact: false,
-                refetchType: 'all'
-              })
+              queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] }),
+              queryClient.invalidateQueries({ queryKey: ['/api/user-documents/folders'] })
             ]);
             
-            // Force a refetch of the specific queries we use
+            // Force immediate refetch to ensure data consistency
             await Promise.all([
               queryClient.refetchQueries({ queryKey: ['/api/user-documents'] }),
               queryClient.refetchQueries({ queryKey: ['/api/user-documents/folders'] })
             ]);
             
-            console.log('✅ Query invalidation completed');
+          } else if (isComplianceDocument) {
+            // Update compliance document category using the new PATCH endpoint
+            response = await apiRequest('PATCH', `/api/documents/${actualDocumentId}`, { 
+              category: targetFolderName 
+            });
             
-            // DEBUG: Add a small delay and then log post-move state
-            setTimeout(() => {
-              console.log('🔍 POST-MOVE DEBUG STATE (delayed):', {
-                userDocumentsAfter: userDocuments?.map(doc => ({
-                  id: doc.id,
-                  title: doc.title,
-                  category: doc.category,
-                  updatedAt: doc.updatedAt
-                })) || [],
-                foldersAfter: folders?.map(f => ({ id: f.id, name: f.name })) || []
-              });
-            }, 1000);
+            // Invalidate and refetch compliance document queries
+            await queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+            await queryClient.refetchQueries({ queryKey: ['/api/documents'] });
+              
+            } else {
+              throw new Error('Unknown document type');
+            }
+            
+            // Parse and verify the response
+            const responseData = await response.json();
+            
+            // Verify the update was successful
+            if (responseData.category !== targetFolderName) {
+              throw new Error(`Category update failed: expected ${targetFolderName}, got ${responseData.category}`);
+            }
             
             // Success feedback
             toast({
@@ -1315,7 +1323,6 @@ const ComplianceWorkspace: React.FC = () => {
               description: `"${itemName}" has been moved to ${targetFolderName}.`,
             });
             
-            console.log('✅ Document move completed successfully');
             return;
             
           } catch (apiError: any) {
@@ -1323,7 +1330,8 @@ const ComplianceWorkspace: React.FC = () => {
               error: apiError,
               documentId: sourceNode.document.id,
               targetCategory: targetFolderName,
-              response: apiError.response?.data
+              isUserDocument,
+              isComplianceDocument
             });
             throw new Error(`Failed to move document: ${apiError.message || 'Unknown API error'}`);
           }

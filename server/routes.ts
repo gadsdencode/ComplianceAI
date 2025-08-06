@@ -297,6 +297,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // PATCH endpoint for updating specific fields (like category) of compliance documents
+  app.patch("/api/documents/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      
+      // Validate document ID
+      if (isNaN(documentId)) {
+        return res.status(400).json({ message: "Invalid document ID" });
+      }
+      
+      // Check if document exists
+      const document = await storage.getDocument(documentId);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      // Check permissions
+      if (req.user.role === "employee" && document.createdById !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Perform the update using transaction
+      const updatedDocument = await storage.updateDocument(documentId, req.body);
+      
+      if (!updatedDocument) {
+        return res.status(500).json({ message: "Failed to update document" });
+      }
+      
+      // Create audit trail record
+      await storage.createAuditRecord({
+        documentId: document.id,
+        userId: req.user.id,
+        action: "DOCUMENT_UPDATED",
+        details: `Document "${document.title}" updated`,
+        ipAddress: req.ip
+      });
+      
+      res.status(200).json(updatedDocument);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Error updating document", 
+        error: error.message 
+      });
+    }
+  });
+
   // Update document status only
   app.patch("/api/documents/:id/status", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
@@ -1484,11 +1535,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For any documents that don't have a matching managed folder, move them to General
       if (managedCategoryNames.length > 0) {
+        // Use Drizzle's proper parameter binding with inArray
         await db.execute(sql`
           UPDATE user_documents 
           SET category = 'General'
           WHERE user_id = ${req.user.id} 
-            AND category NOT IN (${managedCategoryNames.join(',')})
+            AND category NOT IN (${sql.join(managedCategoryNames.map(name => sql`${name}`), sql`, `)})
             AND is_folder_placeholder = false
         `);
       }
@@ -2159,15 +2211,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const documentId = parseInt(req.params.id);
       
-      console.log(`📝 Updating user document ${documentId}:`, {
-        userId: req.user.id,
-        updateData: req.body,
-        timestamp: new Date().toISOString()
-      });
-      
       // Validate document ID
       if (isNaN(documentId)) {
-        console.log(`❌ Invalid document ID provided: ${req.params.id}`);
         return res.status(400).json({ message: "Invalid document ID" });
       }
       
@@ -2175,56 +2220,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const document = await storage.getUserDocument(documentId);
       
       if (!document) {
-        console.log(`❌ Document ${documentId} not found`);
         return res.status(404).json({ message: "Document not found" });
       }
       
       if (document.userId !== req.user.id) {
-        console.log(`❌ User ${req.user.id} attempting to access document owned by ${document.userId}`);
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      console.log(`✅ Document found, proceeding with update:`, {
-        documentId: document.id,
-        currentCategory: document.category,
-        newCategory: req.body.category,
-        currentData: {
-          title: document.title,
-          status: document.status,
-          starred: document.starred,
-          updatedAt: document.updatedAt
-        }
-      });
-      
-      // Perform the update
-      console.log(`🔄 Executing database update for document ${documentId}...`);
+      // Perform the update using transaction
       const updatedDocument = await storage.updateUserDocument(documentId, req.body);
       
       if (!updatedDocument) {
-        console.log(`❌ Update failed for document ${documentId} - no document returned from storage`);
         return res.status(500).json({ message: "Failed to update document" });
-      }
-      
-      console.log(`✅ Document ${documentId} updated successfully:`, {
-        previousCategory: document.category,
-        newCategory: updatedDocument.category,
-        previousUpdatedAt: document.updatedAt,
-        newUpdatedAt: updatedDocument.updatedAt,
-        updatedFields: Object.keys(req.body),
-        wasActuallyUpdated: document.category !== updatedDocument.category
-      });
-      
-      // Verify the update was successful by checking the returned data
-      if (req.body.category && updatedDocument.category !== req.body.category) {
-        console.error(`❌ Category update verification failed:`, {
-          expected: req.body.category,
-          actual: updatedDocument.category,
-          documentId
-        });
-        return res.status(500).json({ 
-          message: "Document update verification failed",
-          details: "Category was not updated as expected"
-        });
       }
       
       res.status(200).json(updatedDocument);

@@ -53,6 +53,8 @@ export default function DashboardPage() {
     isLoading: isLoadingPendingUser
   } = useQuery<any[]>({
     queryKey: ['/api/user-documents'],
+    staleTime: 0, // Always consider data stale
+    refetchOnMount: true, // Always refetch when component mounts
     select: (data) => data
       .filter(doc => doc.status === 'draft')
       .slice(0, 5)
@@ -94,6 +96,8 @@ export default function DashboardPage() {
     isLoading: isLoadingRecentUser
   } = useQuery<any[]>({
     queryKey: ['/api/user-documents'],
+    staleTime: 0, // Always consider data stale
+    refetchOnMount: true, // Always refetch when component mounts
     select: (data) => data.slice(0, 2).map(doc => ({
       id: doc.id,
       title: doc.title,

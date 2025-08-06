@@ -22,6 +22,7 @@ export const documents = pgTable("documents", {
   templateId: integer("template_id").references(() => templates.id),
   version: integer("version").notNull().default(1),
   createdById: integer("created_by_id").references(() => users.id).notNull(),
+  category: varchar("category", { length: 100 }).default("Compliance"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at"),
@@ -128,6 +129,7 @@ export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: t
 export const insertAuditTrailSchema = createInsertSchema(auditTrail).omit({ id: true, timestamp: true });
 export const insertComplianceDeadlineSchema = createInsertSchema(complianceDeadlines).omit({ id: true, createdAt: true });
 export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertUserDocumentSchema = createInsertSchema(userDocuments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type definitions
@@ -153,7 +155,7 @@ export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 
 export type UserDocument = typeof userDocuments.$inferSelect;
-export type InsertUserDocument = typeof userDocuments.$inferInsert;
+export type InsertUserDocument = z.infer<typeof insertUserDocumentSchema>;
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
