@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useDragDropPersistence } from '@/hooks/use-drag-drop-persistence';
 
 interface UserDocumentListProps {
   documents: UserDocument[];
@@ -36,6 +37,23 @@ export default function UserDocumentList({
   const [movingDocumentId, setMovingDocumentId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  
+  // Use the drag-and-drop persistence hook
+  const { moveDocument } = useDragDropPersistence({
+    onSuccess: () => {
+      toast({
+        title: 'Document Moved',
+        description: 'Document has been moved successfully.',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Move Failed',
+        description: error.message || 'Failed to move document. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  });
 
   // Filter documents by search query (title, description, and tags)
   const filteredDocuments = documents.filter(doc => {
@@ -82,11 +100,17 @@ export default function UserDocumentList({
   };
 
   const handleDownload = (doc: UserDocument) => {
-    // Use the same approach as working file downloads to preserve authentication
-    const link = window.document.createElement('a');
-    link.href = doc.fileUrl; // This is already the full API path: /api/user-documents/:id/download
+    // Create a proper download URL using the API endpoint
+    const downloadUrl = `/api/user-documents/${doc.id}/download`;
+    
+    const link = document.createElement('a');
+    link.href = downloadUrl;
     link.setAttribute('download', doc.fileName);
     link.style.display = 'none';
+    
+    // Add credentials to ensure authentication
+    link.setAttribute('crossorigin', 'use-credentials');
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -150,11 +174,10 @@ export default function UserDocumentList({
   };
 
   const handleMoveWithFeedback = async (documentId: number, newCategory: string) => {
-    if (!onMoveDocument) return;
-    
     setMovingDocumentId(documentId);
     try {
-      await onMoveDocument(documentId, newCategory);
+      // Use the new persistence hook instead of the callback
+      await moveDocument(documentId, newCategory, documents.find(d => d.id === documentId)?.category || 'General');
     } finally {
       setMovingDocumentId(null);
     }

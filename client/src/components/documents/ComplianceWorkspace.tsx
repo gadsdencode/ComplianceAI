@@ -1159,13 +1159,19 @@ const ComplianceWorkspace: React.FC = () => {
     
     if ('userId' in node.document) {
       // User document - use API endpoint with proper authentication
-      const link = document.createElement('a');
-      link.href = node.document.fileUrl; // This is the API endpoint: /api/user-documents/:id/download
+      const downloadUrl = `/api/user-documents/${node.document.id}/download`;
+      
+      const link = globalThis.document.createElement('a');
+      link.href = downloadUrl;
       link.setAttribute('download', node.document.fileName);
       link.style.display = 'none';
-      document.body.appendChild(link);
+      
+      // Add credentials to ensure authentication
+      link.setAttribute('crossorigin', 'use-credentials');
+      
+      globalThis.document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      globalThis.document.body.removeChild(link);
     } else {
       // Compliance document - for now, just show a toast
       toast({
@@ -1203,6 +1209,11 @@ const ComplianceWorkspace: React.FC = () => {
   };
 
   const handleMoveToFolder = async (itemId: string, targetFolderId: string, sourceNodeId: string) => {
+    // Declare variables at the top of the function to ensure they're available throughout
+    let targetFolderName: string;
+    let isMovingFolder: boolean;
+    let itemName: string;
+    
     try {
       // Find the target folder for better user feedback
       const targetFolder = fileNodes.find(folder => 
@@ -1216,7 +1227,7 @@ const ComplianceWorkspace: React.FC = () => {
         throw new Error('Target folder not found');
       }
       
-      const targetFolderName = targetFolder.name;
+      targetFolderName = targetFolder.name;
       
       // Determine if we're moving a document or a folder
       const sourceNode = fileNodes.flatMap(folder => [folder, ...(folder.children || [])])
@@ -1227,8 +1238,8 @@ const ComplianceWorkspace: React.FC = () => {
         throw new Error('Source item not found');
       }
       
-      const isMovingFolder = sourceNode.type === 'folder';
-      const itemName = sourceNode.name;
+      isMovingFolder = sourceNode.type === 'folder';
+      itemName = sourceNode.name;
       
       console.log('🔄 Move operation details:', {
         itemId,
@@ -1346,18 +1357,10 @@ const ComplianceWorkspace: React.FC = () => {
       });
       
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Move operation failed:', {
-        error,
-        itemId,
-        targetFolderId,
-        sourceNodeId,
-        errorMessage
-      });
-      
+      console.error('❌ Error in handleMoveToFolder:', error);
       toast({
         title: "Move Failed",
-        description: `Failed to move item: ${errorMessage}`,
+        description: error instanceof Error ? error.message : "Failed to move item. Please try again.",
         variant: "destructive",
       });
     }

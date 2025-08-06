@@ -41,15 +41,15 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// Create the query client with proper caching configuration
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      // CRITICAL FIX: Remove staleTime: Infinity to allow invalidated queries to refetch
-      // staleTime: Infinity, // This was preventing invalidated queries from refetching!
-      staleTime: 5 * 60 * 1000, // 5 minutes - reasonable stale time that still allows invalidation
+      staleTime: 1000 * 60 * 5, // 5 minutes - reasonable cache time
+      gcTime: 1000 * 60 * 10, // 10 minutes - keep in memory longer
       retry: false,
     },
     mutations: {
@@ -57,3 +57,14 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Add debugging for cache operations
+if (typeof window !== 'undefined') {
+  // Debug cache on mount
+  console.log('🔍 Initial cache state:', queryClient.getQueryCache().getAll());
+  
+  // Monitor cache changes
+  queryClient.getQueryCache().subscribe((event) => {
+    console.log('🔄 Cache event:', event.type, event.query?.queryKey);
+  });
+}
