@@ -95,16 +95,6 @@ if (isReplitEnvironment) {
       stream.push(null);
       return stream;
     }
-    
-    async downloadAsBytes(objectName: string): Promise<{ ok: boolean; value?: Buffer; error?: any }> {
-      const data = this.storage.get(objectName);
-      if (!data) {
-        console.log(`❌ Mock download bytes: ${objectName} not found`);
-        return { ok: false, error: 'File not found' };
-      }
-      console.log(`⬇️ Mock download bytes: ${objectName} (${data.length} bytes)`);
-      return { ok: true, value: data };
-    }
   }
   
   objectClient = new DevelopmentObjectClient() as any;
@@ -1762,24 +1752,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ File found in object storage: ${document.fileUrl}`);
       
-      // Download file as bytes for reliable binary file handling
-      const downloadResult = await storageClient.downloadAsBytes(document.fileUrl);
-      
-      if (!downloadResult.ok) {
-        console.error(`❌ Failed to download file: ${downloadResult.error}`);
-        return res.status(500).json({ message: "Error downloading file", error: downloadResult.error });
-      }
-      
-      const fileBytes = downloadResult.value;
+      // Use downloadAsStream but collect into buffer for binary file handling
+      const stream = storageClient.downloadAsStream(document.fileUrl);
       const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
       
-      // Set proper headers for binary file download
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
-      res.setHeader('Content-Length', fileBytes.length.toString());
+      // Collect stream into buffer to ensure binary file integrity
+      const chunks: Buffer[] = [];
+      let totalLength = 0;
       
-      // Send the file bytes directly to prevent corruption
-      res.end(fileBytes);
+      stream.on('data', (chunk: Buffer) => {
+        chunks.push(chunk);
+        totalLength += chunk.length;
+      });
+      
+      stream.on('end', () => {
+        try {
+          const fileBuffer = Buffer.concat(chunks, totalLength);
+          
+          // Set proper headers for binary file download
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+          res.setHeader('Content-Length', fileBuffer.length.toString());
+          
+          // Send complete buffer to prevent corruption
+          res.end(fileBuffer);
+        } catch (bufferError) {
+          console.error(`❌ Error creating file buffer:`, bufferError);
+          if (!res.headersSent) {
+            res.status(500).json({ message: "Error processing file", error: bufferError });
+          }
+        }
+      });
+      
+      stream.on('error', (streamError: any) => {
+        console.error(`❌ Stream error:`, streamError);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Error downloading file", error: streamError.message });
+        }
+      });
       
     } catch (error) {
       console.error("Error processing download request:", error);
