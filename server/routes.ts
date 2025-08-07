@@ -42,6 +42,14 @@ const isReplitEnvironment = !!(
   process.env.FORCE_REPLIT_STORAGE === 'true'
 );
 
+console.log('🔍 Environment Detection:');
+console.log('  REPL_ID:', !!process.env.REPL_ID);
+console.log('  REPLIT_DB_URL:', !!process.env.REPLIT_DB_URL);
+console.log('  REPLIT_DEPLOYMENT:', !!process.env.REPLIT_DEPLOYMENT);
+console.log('  REPLIT_DOMAINS:', !!process.env.REPLIT_DOMAINS);
+console.log('  FORCE_REPLIT_STORAGE:', process.env.FORCE_REPLIT_STORAGE);
+console.log('  isReplitEnvironment:', isReplitEnvironment);
+
 // Create a single Replit Object Storage client instance
 let objectClient: Client | null = null;
 
@@ -1752,44 +1760,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ File found in object storage: ${document.fileUrl}`);
       
-      // Use downloadAsStream but collect into buffer for binary file handling
-      const stream = storageClient.downloadAsStream(document.fileUrl);
-      const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
-      
-      // Collect stream into buffer to ensure binary file integrity
-      const chunks: Buffer[] = [];
-      let totalLength = 0;
-      
-      stream.on('data', (chunk: Buffer) => {
-        chunks.push(chunk);
-        totalLength += chunk.length;
-      });
-      
-      stream.on('end', () => {
-        try {
-          const fileBuffer = Buffer.concat(chunks, totalLength);
-          
-          // Set proper headers for binary file download
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
-          res.setHeader('Content-Length', fileBuffer.length.toString());
-          
-          // Send complete buffer to prevent corruption
-          res.end(fileBuffer);
-        } catch (bufferError) {
-          console.error(`❌ Error creating file buffer:`, bufferError);
+      try {
+        // Get the content type
+        const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
+        console.log(`📄 Content type detected: ${contentType} for file: ${document.fileName}`);
+        
+        // Set headers BEFORE starting the stream
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        // Create the download stream
+        const stream = storageClient.downloadAsStream(document.fileUrl);
+        console.log(`📡 Starting download stream for: ${document.fileUrl}`);
+        
+        // Set up error handling before piping
+        stream.on('error', (streamError: any) => {
+          console.error(`❌ Download stream error for ${document.fileName}:`, streamError);
           if (!res.headersSent) {
-            res.status(500).json({ message: "Error processing file", error: bufferError });
+            res.status(500).json({ 
+              message: "Error downloading file from storage", 
+              error: streamError.message,
+              fileName: document.fileName
+            });
           }
-        }
-      });
-      
-      stream.on('error', (streamError: any) => {
-        console.error(`❌ Stream error:`, streamError);
+        });
+        
+        // Set up completion logging
+        stream.on('end', () => {
+          console.log(`✅ Download completed for: ${document.fileName}`);
+        });
+        
+        // Set up response error handling
+        res.on('error', (resError: any) => {
+          console.error(`❌ Response error for ${document.fileName}:`, resError);
+        });
+        
+        // Pipe the stream directly to response for optimal performance
+        // This is the recommended approach from Replit Object Storage docs
+        stream.pipe(res);
+        
+      } catch (setupError) {
+        console.error(`❌ Error setting up download for ${document.fileName}:`, setupError);
         if (!res.headersSent) {
-          res.status(500).json({ message: "Error downloading file", error: streamError.message });
+          res.status(500).json({ 
+            message: "Error setting up file download", 
+            error: setupError instanceof Error ? setupError.message : String(setupError)
+          });
         }
-      });
+      }
       
     } catch (error) {
       console.error("Error processing download request:", error);
@@ -1897,19 +1916,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Upload file to Object Storage
+        console.log(`🚀 Uploading to object storage:`, {
+          objectName,
+          fileSize: fileData.length,
+          bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID,
+          isReplitEnv: isReplitEnvironment
+        });
+        
         const uploadResult = await objectStorage.uploadFromBytes(
           objectName, 
           fileData
         );
         
+        console.log(`📤 Upload result:`, uploadResult);
+        
         if (!uploadResult.ok) {
-          console.error("Error uploading to storage:", uploadResult.error);
-          console.error("Error details:", JSON.stringify(uploadResult, null, 2));
+          console.error("❌ Error uploading to storage:", uploadResult.error);
+          console.error("❌ Error details:", JSON.stringify(uploadResult, null, 2));
           return res.status(500).json({ 
             message: "Error uploading file to storage", 
             error: uploadResult.error,
             details: uploadResult
           });
+        }
+        
+        console.log(`✅ Successfully uploaded to object storage: ${objectName}`);
+        
+        // Verify the file was uploaded by checking if it exists
+        try {
+          const verifyResult = await objectStorage.exists(objectName);
+          console.log(`🔍 Upload verification:`, verifyResult);
+          if (!verifyResult.ok || !verifyResult.value) {
+            console.error(`❌ File verification failed: ${objectName}`);
+            return res.status(500).json({ 
+              message: "File upload verification failed" 
+            });
+          }
+        } catch (verifyError) {
+          console.error(`❌ Could not verify upload:`, verifyError);
+          // Don't fail the request, just log the warning
         }
         
         // Clean up temporary file if it exists
