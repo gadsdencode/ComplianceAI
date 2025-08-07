@@ -70,6 +70,8 @@ if (isReplitEnvironment) {
     async uploadFromBytes(objectName: string, data: Buffer): Promise<{ ok: boolean; error?: any }> {
       this.storage.set(objectName, data);
       console.log(`📁 Mock upload: ${objectName} (${data.length} bytes)`);
+      console.log(`📁 Total files in storage: ${this.storage.size}`);
+      console.log(`📁 Storage keys:`, Array.from(this.storage.keys()));
       return { ok: true };
     }
     
@@ -96,11 +98,27 @@ if (isReplitEnvironment) {
     downloadAsStream(objectName: string): any {
       const data = this.storage.get(objectName) || Buffer.from('');
       console.log(`⬇️ Mock download stream: ${objectName} (${data.length} bytes)`);
+      console.log(`⬇️ Storage has file: ${this.storage.has(objectName)}`);
+      console.log(`⬇️ Available files:`, Array.from(this.storage.keys()));
       
-      const Readable = require('stream').Readable;
-      const stream = new Readable();
-      stream.push(data);
-      stream.push(null);
+      const { Readable } = require('stream');
+      const stream = new Readable({
+        read() {
+          // Stream implementation that actually works
+        }
+      });
+      
+      // Push data in chunks for better streaming behavior
+      if (data.length > 0) {
+        const chunkSize = 64 * 1024; // 64KB chunks
+        let offset = 0;
+        while (offset < data.length) {
+          const chunk = data.slice(offset, offset + chunkSize);
+          stream.push(chunk);
+          offset += chunkSize;
+        }
+      }
+      stream.push(null); // End the stream
       return stream;
     }
   }
@@ -1728,7 +1746,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         documentId: document.id,
         fileName: document.fileName,
         fileUrl: document.fileUrl,
-        fileSize: document.fileSize
+        fileSize: document.fileSize,
+        userId: document.userId,
+        createdAt: document.createdAt,
+        category: document.category
       });
       
       // Ensure user can only access their own files
