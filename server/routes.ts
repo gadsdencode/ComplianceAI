@@ -95,6 +95,16 @@ if (isReplitEnvironment) {
       stream.push(null);
       return stream;
     }
+    
+    async downloadAsBytes(objectName: string): Promise<{ ok: boolean; value?: Buffer; error?: any }> {
+      const data = this.storage.get(objectName);
+      if (!data) {
+        console.log(`❌ Mock download bytes: ${objectName} not found`);
+        return { ok: false, error: 'File not found' };
+      }
+      console.log(`⬇️ Mock download bytes: ${objectName} (${data.length} bytes)`);
+      return { ok: true, value: data };
+    }
   }
   
   objectClient = new DevelopmentObjectClient() as any;
@@ -1752,16 +1762,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`✅ File found in object storage: ${document.fileUrl}`);
       
-      // Create the download stream (EXACTLY like the working endpoint)
-      const stream = storageClient.downloadAsStream(document.fileUrl);
+      // Download file as bytes for reliable binary file handling
+      const downloadResult = await storageClient.downloadAsBytes(document.fileUrl);
+      
+      if (!downloadResult.ok) {
+        console.error(`❌ Failed to download file: ${downloadResult.error}`);
+        return res.status(500).json({ message: "Error downloading file", error: downloadResult.error });
+      }
+      
+      const fileBytes = downloadResult.value;
       const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
       
-      // Set headers and pipe (EXACTLY like the working endpoint)
+      // Set proper headers for binary file download
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+      res.setHeader('Content-Length', fileBytes.length.toString());
       
-      // Pipe the stream directly to response (just like the working endpoint)
-      stream.pipe(res);
+      // Send the file bytes directly to prevent corruption
+      res.end(fileBytes);
       
     } catch (error) {
       console.error("Error processing download request:", error);
