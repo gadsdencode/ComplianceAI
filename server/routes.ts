@@ -1690,12 +1690,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userDocuments = await storage.getUserDocuments(req.user.id);
       
-      // Add signed URLs for direct access to documents
-      const documentsWithUrls = userDocuments.map(doc => ({
-        ...doc,
-        // Create a direct download URL for each document
-        fileUrl: `/api/user-documents/${doc.id}/download`
-      }));
+      // Return documents with their original object storage paths preserved
+      // Frontend will construct API URLs as needed: /api/user-documents/${doc.id}/download
+      const documentsWithUrls = userDocuments;
       
       res.json(documentsWithUrls);
     } catch (error: any) {
@@ -1833,10 +1830,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("File type:", uploadedFile.mimetype);
       console.log("File size:", uploadedFile.size);
       
-      // For storage in Replit Object Storage
+      // Extract category from folder ID if provided (do this early to use in object path)
+      let category = 'General'; // Default category
+      if (metadata.folderId) {
+        // Extract folder name from ID format: folder-{userId}-{folderName}
+        const folderNamePart = metadata.folderId.replace(/^folder-\d+-/, '');
+        category = folderNamePart.replace(/-/g, ' ');
+      }
+      
+      // For storage in Replit Object Storage - include category/folder structure
       const timestamp = Date.now();
       const sanitizedFileName = uploadedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const objectName = `${req.user.id}/${timestamp}-${sanitizedFileName}`;
+      const sanitizedCategory = category.replace(/\s+/g, '-').toLowerCase();
+      const objectName = `user-documents/${req.user.id}/${sanitizedCategory}/${timestamp}-${sanitizedFileName}`;
       
       try {
         // Use the same global storage client for consistency with download
@@ -1846,7 +1852,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error('Object storage client not initialized');
         }
         
-        console.log("Attempting to upload file:", objectName);
+        console.log("Attempting to upload file to object storage path:", objectName);
         
         // Read file content from temp file path (express-fileupload with useTempFiles: true)
         let fileData: Buffer;
@@ -1887,14 +1893,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.warn(`⚠️ Failed to cleanup temp file: ${uploadedFile.tempFilePath}`, cleanupError);
             // Don't fail the upload for cleanup errors
           }
-        }
-        
-        // Extract category from folder ID if provided
-        let category = 'General'; // Default category
-        if (metadata.folderId) {
-          // Extract folder name from ID format: folder-{userId}-{folderName}
-          const folderNamePart = metadata.folderId.replace(/^folder-\d+-/, '');
-          category = folderNamePart.replace(/-/g, ' ');
         }
 
         // Create a new document record
@@ -2028,10 +2026,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`Processing file ${index + 1}/${files.length}: ${file.name} (${file.size} bytes)`);
           
-          // Generate unique object name for storage
+          // Generate unique object name for storage with proper folder structure
           const timestamp = Date.now();
           const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-          const objectName = `${req.user.id}/${timestamp}-${index}-${sanitizedFileName}`;
+          const sanitizedCategory = category.replace(/\s+/g, '-').toLowerCase();
+          const objectName = `user-documents/${req.user.id}/${sanitizedCategory}/${timestamp}-${index}-${sanitizedFileName}`;
           
           // Use the same global storage client for consistency with download
           const objectStorage = objectClient;

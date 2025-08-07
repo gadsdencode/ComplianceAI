@@ -3,6 +3,7 @@ import { runMigration as addNotificationsTable } from "./migrations/add-notifica
 import { runMigration as addUserDocumentsFields } from "./migrations/add-user-documents-fields.js";
 import { up as addCategoryToDocuments } from "./migrations/add-category-to-documents.js";
 import { runMigration as addSessionTable } from "./migrations/add-session-table.js";
+import { runMigration as fixUserDocumentsFileUrl } from "./migrations/fix-user-documents-fileurl.js";
 
 async function runAllMigrations() {
   console.log("🚀 Starting database migrations...");
@@ -23,6 +24,9 @@ async function runAllMigrations() {
     
     console.log("🗂️ Running session table migration...");
     await addSessionTable();
+    
+    console.log("🔗 Running fileUrl fix migration...");
+    await fixUserDocumentsFileUrl();
     
     console.log("✅ All migrations completed successfully");
   } catch (error) {
