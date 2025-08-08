@@ -126,6 +126,77 @@ if (isReplitEnvironment) {
   objectClient = new DevelopmentObjectClient() as any;
 }
 
+// --- Manual import search configuration and helpers ---
+const MANUAL_IMPORT_PREFIXES: string[] = (process.env.MANUAL_IMPORT_PREFIXES || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+console.log('📁 Manual import prefixes (env):', MANUAL_IMPORT_PREFIXES.length > 0 ? MANUAL_IMPORT_PREFIXES : '[using defaults]');
+
+function normalizeNamePart(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\.[^.]+$/,'') // drop extension
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function getExt(name: string): string {
+  const i = name.lastIndexOf('.');
+  return i >= 0 ? name.slice(i).toLowerCase() : '';
+}
+
+async function listAllObjectNames(storage: any, prefix: string): Promise<{ name: string; size?: number }[]> {
+  const out: { name: string; size?: number }[] = [];
+  let cursor: string | undefined = undefined;
+  let guard = 0;
+  while (guard++ < 200) {
+    const opts: any = { prefix };
+    if (cursor) opts.cursor = cursor;
+    const res = await storage.list(opts);
+    if (!res || res.ok === false) break;
+    const value = res.value;
+    const items: any[] = Array.isArray(value) ? value : (value?.objects ?? value?.items ?? []);
+    for (const item of items) {
+      const name: string = item?.name ?? item?.key ?? '';
+      if (!name) continue;
+      const size: number | undefined = item?.size ?? item?.contentLength ?? item?.bytes;
+      out.push({ name, size });
+    }
+    cursor = value?.cursor || value?.next || value?.nextToken || undefined;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+function chooseBestMatch(
+  targetFileName: string,
+  targetSize: number | undefined,
+  candidates: { name: string; size?: number }[]
+): string | null {
+  const wantedExt = getExt(targetFileName);
+  const wantedBase = normalizeNamePart(targetFileName);
+  let best: { name: string; score: number } | null = null;
+  for (const c of candidates) {
+    const fileOnly = c.name.split('/').pop() || c.name;
+    const extOk = getExt(fileOnly) === wantedExt || wantedExt === '';
+    if (!extOk) continue;
+    const baseNorm = normalizeNamePart(fileOnly);
+    let score = 0;
+    if (baseNorm === wantedBase) score += 5;
+    // variant: collapse separators only
+    const collaps = (s: string) => s.toLowerCase().replace(/[_\s-]+/g, '');
+    if (collaps(fileOnly).endsWith(collaps(targetFileName))) score += 3;
+    if (typeof targetSize === 'number' && typeof c.size === 'number' && c.size > 0) {
+      const diff = Math.abs(c.size - targetSize) / c.size;
+      if (diff <= 0.02) score += 4; else if (diff <= 0.1) score += 1;
+    }
+    if (!best || score > best.score) best = { name: c.name, score };
+  }
+  return best ? best.name : null;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
   setupAuth(app);
@@ -1781,37 +1852,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const category = document.category || 'General';
           const categorySlug = category.replace(/\s+/g, '-').toLowerCase();
           const userPrefix = `user-documents/${document.userId}/`;
+
+          // Build prefix list: env-driven first, then sensible defaults
+          const dynamicPrefixes: string[] = [];
+          for (const p of MANUAL_IMPORT_PREFIXES) {
+            if (p.includes('{userId}') || p.includes('{category}') || p.includes('{categorySlug}')) {
+              dynamicPrefixes.push(
+                p
+                  .replaceAll('{userId}', String(document.userId))
+                  .replaceAll('{category}', category)
+                  .replaceAll('{categorySlug}', categorySlug)
+              );
+            } else {
+              dynamicPrefixes.push(p.endsWith('/') ? p : `${p}`);
+            }
+          }
+
           const knownPrefixes = [
+            ...dynamicPrefixes,
             `user-documents/${document.userId}/${categorySlug}/`,
             userPrefix,
-            `docfiles/${category}/`, // matches manual upload structure shown in UI
+            `docfiles/${category}/`,
             'docfiles/',
-            ''
           ];
+          if (process.env.ALLOW_BUCKET_WIDE_SCAN === 'true') knownPrefixes.push('');
 
-          let foundKey: string | null = null;
+          // Gather candidates across prefixes (with pagination)
+          const candidates: { name: string; size?: number }[] = [];
           for (const prefix of knownPrefixes) {
             try {
-              const listRes = await storageClient.list({ prefix });
-              if (!listRes.ok) continue;
-              const names: string[] = (listRes.value || []).map((o: any) => o.name);
-              const matches = names.filter((n) => n.endsWith(document.fileName));
-              if (matches.length > 0) {
-                matches.sort().reverse();
-                foundKey = matches[0];
-                break;
-              }
+              const items = await listAllObjectNames(storageClient, prefix);
+              candidates.push(...items);
             } catch (e) {
               console.warn(`Prefix scan failed for '${prefix}':`, (e as any)?.message || e);
             }
           }
 
-          if (!foundKey) {
-            console.error(`❌ No matching object found for filename: ${document.fileName} in known prefixes.`);
+          const best = chooseBestMatch(document.fileName, document.fileSize, candidates);
+          if (!best) {
+            console.error(`❌ No matching object found for filename: ${document.fileName}`);
             return res.status(404).json({ message: "File not found" });
           }
 
-          streamKey = foundKey;
+          streamKey = best;
           console.log(`🔁 Fallback matched object: ${streamKey} (updating database file_url)`);
           try {
             await storage.updateUserDocument(document.id, { fileUrl: streamKey });
