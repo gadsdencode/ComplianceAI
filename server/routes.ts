@@ -1765,9 +1765,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const storageClient = objectClient;
       
-      // Check if file exists in storage (EXACTLY like the working document files endpoint)
-      console.log(`🔍 Checking if file exists in object storage: ${document.fileUrl}`);
-      const existsResult = await storageClient.exists(document.fileUrl);
+      // Determine the object key to stream, with a resilient fallback if the recorded key is wrong
+      let streamKey = document.fileUrl;
+      console.log(`🔍 Checking if file exists in object storage: ${streamKey}`);
+      const existsResult = await storageClient.exists(streamKey);
       console.log(`🔍 Object storage exists check result:`, existsResult);
       
       if (!existsResult.ok) {
@@ -1775,11 +1776,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Error checking file", error: existsResult.error });
       }
       if (!existsResult.value) {
-        console.error(`❌ File not found in object storage: ${document.fileUrl}`);
-        return res.status(404).json({ message: "File not found" });
+        console.warn(`⚠️ File not found at recorded key: ${streamKey}. Attempting fallback search by filename...`);
+        try {
+          const userPrefix = `user-documents/${document.userId}/`;
+          const listRes = await storageClient.list({ prefix: userPrefix });
+          if (!listRes.ok) {
+            console.error(`❌ Error listing objects with prefix ${userPrefix}:`, listRes.error);
+            return res.status(404).json({ message: "File not found" });
+          }
+          const allNames = (listRes.value || []).map((o: any) => o.name);
+          const categorySlug = (document.category || 'General').replace(/\s+/g, '-').toLowerCase();
+          const inCategory = allNames
+            .filter((n: string) => n.startsWith(`user-documents/${document.userId}/${categorySlug}/`))
+            .filter((n: string) => n.endsWith(document.fileName));
+          let candidates = inCategory;
+          if (candidates.length === 0) {
+            candidates = allNames.filter((n: string) => n.endsWith(document.fileName));
+          }
+          if (candidates.length === 0) {
+            console.error(`❌ No matching object found for filename: ${document.fileName} under prefix ${userPrefix}`);
+            return res.status(404).json({ message: "File not found" });
+          }
+          // Prefer the most recent lexicographically if names contain timestamps
+          candidates.sort().reverse();
+          streamKey = candidates[0];
+          console.log(`🔁 Fallback matched object: ${streamKey} (updating database file_url)`);
+          try {
+            await storage.updateUserDocument(document.id, { fileUrl: streamKey });
+          } catch (updateErr) {
+            console.warn(`⚠️ Failed to update fileUrl for document ${document.id}`, updateErr);
+          }
+        } catch (fallbackErr) {
+          console.error(`❌ Fallback search failed:`, fallbackErr);
+          return res.status(404).json({ message: "File not found" });
+        }
       }
       
-      console.log(`✅ File found in object storage: ${document.fileUrl}`);
+      console.log(`✅ Using object storage key: ${streamKey}`);
       
       try {
         // Get the content type
@@ -1792,8 +1825,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Cache-Control', 'no-cache');
         
         // Create the download stream
-        const stream = storageClient.downloadAsStream(document.fileUrl);
-        console.log(`📡 Starting download stream for: ${document.fileUrl}`);
+        const stream = storageClient.downloadAsStream(streamKey);
+        console.log(`📡 Starting download stream for: ${streamKey}`);
         
         // Set up error handling before piping
         stream.on('error', (streamError: any) => {
