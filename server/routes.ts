@@ -1778,28 +1778,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!existsResult.value) {
         console.warn(`⚠️ File not found at recorded key: ${streamKey}. Attempting fallback search by filename...`);
         try {
+          const category = document.category || 'General';
+          const categorySlug = category.replace(/\s+/g, '-').toLowerCase();
           const userPrefix = `user-documents/${document.userId}/`;
-          const listRes = await storageClient.list({ prefix: userPrefix });
-          if (!listRes.ok) {
-            console.error(`❌ Error listing objects with prefix ${userPrefix}:`, listRes.error);
+          const knownPrefixes = [
+            `user-documents/${document.userId}/${categorySlug}/`,
+            userPrefix,
+            `docfiles/${category}/`, // matches manual upload structure shown in UI
+            'docfiles/',
+            ''
+          ];
+
+          let foundKey: string | null = null;
+          for (const prefix of knownPrefixes) {
+            try {
+              const listRes = await storageClient.list({ prefix });
+              if (!listRes.ok) continue;
+              const names: string[] = (listRes.value || []).map((o: any) => o.name);
+              const matches = names.filter((n) => n.endsWith(document.fileName));
+              if (matches.length > 0) {
+                matches.sort().reverse();
+                foundKey = matches[0];
+                break;
+              }
+            } catch (e) {
+              console.warn(`Prefix scan failed for '${prefix}':`, (e as any)?.message || e);
+            }
+          }
+
+          if (!foundKey) {
+            console.error(`❌ No matching object found for filename: ${document.fileName} in known prefixes.`);
             return res.status(404).json({ message: "File not found" });
           }
-          const allNames = (listRes.value || []).map((o: any) => o.name);
-          const categorySlug = (document.category || 'General').replace(/\s+/g, '-').toLowerCase();
-          const inCategory = allNames
-            .filter((n: string) => n.startsWith(`user-documents/${document.userId}/${categorySlug}/`))
-            .filter((n: string) => n.endsWith(document.fileName));
-          let candidates = inCategory;
-          if (candidates.length === 0) {
-            candidates = allNames.filter((n: string) => n.endsWith(document.fileName));
-          }
-          if (candidates.length === 0) {
-            console.error(`❌ No matching object found for filename: ${document.fileName} under prefix ${userPrefix}`);
-            return res.status(404).json({ message: "File not found" });
-          }
-          // Prefer the most recent lexicographically if names contain timestamps
-          candidates.sort().reverse();
-          streamKey = candidates[0];
+
+          streamKey = foundKey;
           console.log(`🔁 Fallback matched object: ${streamKey} (updating database file_url)`);
           try {
             await storage.updateUserDocument(document.id, { fileUrl: streamKey });
@@ -1819,40 +1831,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const contentType = mime.lookup(document.fileName) as string || document.fileType || 'application/octet-stream';
         console.log(`📄 Content type detected: ${contentType} for file: ${document.fileName}`);
         
-        // Set headers BEFORE starting the stream
+        // Set headers BEFORE starting the body
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
         res.setHeader('Cache-Control', 'no-cache');
         
-        // Create the download stream
-        const stream = storageClient.downloadAsStream(streamKey);
-        console.log(`📡 Starting download stream for: ${streamKey}`);
-        
-        // Set up error handling before piping
-        stream.on('error', (streamError: any) => {
-          console.error(`❌ Download stream error for ${document.fileName}:`, streamError);
-          if (!res.headersSent) {
-            res.status(500).json({ 
-              message: "Error downloading file from storage", 
-              error: streamError.message,
-              fileName: document.fileName
-            });
+        // Prefer streaming, but handle both Node and Web streams, or bytes fallback
+        let streamed = false;
+        try {
+          if (typeof (storageClient as any).downloadAsStream === 'function') {
+            const maybeStream: any = await (storageClient as any).downloadAsStream(streamKey);
+            if (maybeStream && typeof maybeStream.pipe === 'function') {
+              console.log(`📡 Starting Node stream for: ${streamKey}`);
+              streamed = true;
+              maybeStream.on('error', (err: any) => {
+                console.error(`❌ Node stream error for ${document.fileName}:`, err);
+                if (!res.headersSent) res.status(500).end();
+              });
+              maybeStream.pipe(res);
+            } else if (maybeStream && typeof maybeStream.getReader === 'function') {
+              console.log(`📡 Starting Web stream for: ${streamKey}`);
+              const { Readable } = await import('stream');
+              const nodeStream = (Readable as any).fromWeb ? (Readable as any).fromWeb(maybeStream) : null;
+              if (nodeStream) {
+                streamed = true;
+                nodeStream.on('error', (err: any) => {
+                  console.error(`❌ Web->Node stream error for ${document.fileName}:`, err);
+                  if (!res.headersSent) res.status(500).end();
+                });
+                nodeStream.pipe(res);
+              }
+            }
           }
-        });
-        
-        // Set up completion logging
-        stream.on('end', () => {
-          console.log(`✅ Download completed for: ${document.fileName}`);
-        });
-        
-        // Set up response error handling
-        res.on('error', (resError: any) => {
-          console.error(`❌ Response error for ${document.fileName}:`, resError);
-        });
-        
-        // Pipe the stream directly to response for optimal performance
-        // This is the recommended approach from Replit Object Storage docs
-        stream.pipe(res);
+        } catch (streamErr) {
+          console.warn(`⚠️ Streaming attempt failed, will try bytes fallback:`, (streamErr as any)?.message || streamErr);
+        }
+
+        if (!streamed) {
+          if (typeof (storageClient as any).downloadAsBytes === 'function') {
+            console.log(`⬇️ Falling back to bytes download for: ${streamKey}`);
+            const bytesRes: any = await (storageClient as any).downloadAsBytes(streamKey);
+            const bytes: Uint8Array = (bytesRes && bytesRes.value) ? bytesRes.value : bytesRes;
+            const buf = Buffer.from(bytes);
+            res.setHeader('Content-Length', String(buf.length));
+            return res.end(buf);
+          } else {
+            console.error(`❌ Storage client does not support downloadAsBytes and streaming was unavailable.`);
+            return res.status(500).json({ message: "Storage client cannot stream file" });
+          }
+        }
         
       } catch (setupError) {
         console.error(`❌ Error setting up download for ${document.fileName}:`, setupError);
