@@ -69,6 +69,8 @@ export interface IStorage {
   createTemplate(template: InsertTemplate): Promise<Template>;
   getTemplate(id: number): Promise<Template | undefined>;
   listTemplates(): Promise<Template[]>;
+  updateTemplate(id: number, data: Partial<InsertTemplate>): Promise<Template | undefined>;
+  deleteTemplate(id: number): Promise<void>;
   
   // User Documents Repository
   getUserDocuments(userId: number): Promise<UserDocument[]>;
@@ -514,6 +516,24 @@ export class DatabaseStorage implements IStorage {
   
   async listTemplates(): Promise<Template[]> {
     return await db.select().from(templates);
+  }
+
+  async updateTemplate(id: number, data: Partial<InsertTemplate>): Promise<Template | undefined> {
+    const [updatedTemplate] = await db
+      .update(templates)
+      .set({
+        ...data,
+        updatedAt: new Date()
+      })
+      .where(eq(templates.id, id))
+      .returning();
+    return updatedTemplate;
+  }
+
+  async deleteTemplate(id: number): Promise<void> {
+    await db
+      .delete(templates)
+      .where(eq(templates.id, id));
   }
 
   // User Documents Repository - using database

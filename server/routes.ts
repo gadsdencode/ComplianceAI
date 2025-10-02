@@ -121,6 +121,18 @@ if (isReplitEnvironment) {
       stream.push(null); // End the stream
       return stream;
     }
+    
+    async downloadAsBytes(objectName: string): Promise<{ ok: boolean; value: Uint8Array; error?: any }> {
+      const data = this.storage.get(objectName);
+      console.log(`⬇️ Mock download bytes: ${objectName} (${data?.length || 0} bytes)`);
+      console.log(`⬇️ Storage has file: ${this.storage.has(objectName)}`);
+      
+      if (!data) {
+        return { ok: false, value: new Uint8Array(0), error: 'File not found' };
+      }
+      
+      return { ok: true, value: new Uint8Array(data) };
+    }
   }
   
   objectClient = new DevelopmentObjectClient() as any;
@@ -1076,6 +1088,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error creating template", error: error.message });
     }
   });
+
+  app.put("/api/templates/:id", requireRole(["admin", "compliance_officer"]), async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const templateId = parseInt(req.params.id);
+      
+      // Validate template ID
+      if (isNaN(templateId)) {
+        return res.status(400).json({ message: "Invalid template ID" });
+      }
+      
+      // Check if template exists
+      const existingTemplate = await storage.getTemplate(templateId);
+      
+      if (!existingTemplate) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      // Check permissions - only allow editing if user is admin or created the template
+      if (req.user.role !== "admin" && existingTemplate.createdById !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Don't allow editing default templates
+      if (existingTemplate.isDefault) {
+        return res.status(403).json({ message: "Cannot edit default templates" });
+      }
+      
+      const validation = insertTemplateSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return res.status(400).json({ message: "Invalid template data", errors: validation.error.format() });
+      }
+      
+      const updatedTemplate = await storage.updateTemplate(templateId, req.body);
+      
+      if (!updatedTemplate) {
+        return res.status(500).json({ message: "Failed to update template" });
+      }
+      
+      res.json(updatedTemplate);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating template", error: error.message });
+    }
+  });
+
+  app.delete("/api/templates/:id", requireRole(["admin", "compliance_officer"]), async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const templateId = parseInt(req.params.id);
+      
+      // Validate template ID
+      if (isNaN(templateId)) {
+        return res.status(400).json({ message: "Invalid template ID" });
+      }
+      
+      // Check if template exists
+      const existingTemplate = await storage.getTemplate(templateId);
+      
+      if (!existingTemplate) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      // Check permissions - only allow deleting if user is admin or created the template
+      if (req.user.role !== "admin" && existingTemplate.createdById !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Don't allow deleting default templates
+      if (existingTemplate.isDefault) {
+        return res.status(403).json({ message: "Cannot delete default templates" });
+      }
+      
+      await storage.deleteTemplate(templateId);
+      
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting template", error: error.message });
+    }
+  });
   
   // AI service endpoints
   app.post("/api/ai/generate-from-template", async (req: Request, res: Response) => {
@@ -1919,7 +2017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
         res.setHeader('Cache-Control', 'no-cache');
         
-        // Prefer streaming, but handle both Node and Web streams, or bytes fallback
+        // Try streaming first, with proper error handling
         let streamed = false;
         try {
           if (typeof (storageClient as any).downloadAsStream === 'function') {
@@ -1927,10 +2025,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (maybeStream && typeof maybeStream.pipe === 'function') {
               console.log(`📡 Starting Node stream for: ${streamKey}`);
               streamed = true;
+              
+              // Set up proper error handling
               maybeStream.on('error', (err: any) => {
                 console.error(`❌ Node stream error for ${document.fileName}:`, err);
-                if (!res.headersSent) res.status(500).end();
+                if (!res.headersSent) {
+                  res.status(500).json({ message: "Stream error", error: err.message });
+                }
               });
+              
+              // Handle stream end
+              maybeStream.on('end', () => {
+                console.log(`✅ Stream completed for: ${document.fileName}`);
+              });
+              
+              // Pipe the stream to response
               maybeStream.pipe(res);
             } else if (maybeStream && typeof maybeStream.getReader === 'function') {
               console.log(`📡 Starting Web stream for: ${streamKey}`);
@@ -1940,7 +2049,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 streamed = true;
                 nodeStream.on('error', (err: any) => {
                   console.error(`❌ Web->Node stream error for ${document.fileName}:`, err);
-                  if (!res.headersSent) res.status(500).end();
+                  if (!res.headersSent) {
+                    res.status(500).json({ message: "Stream conversion error", error: err.message });
+                  }
                 });
                 nodeStream.pipe(res);
               }
@@ -1950,17 +2061,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.warn(`⚠️ Streaming attempt failed, will try bytes fallback:`, (streamErr as any)?.message || streamErr);
         }
 
+        // Fallback to bytes download if streaming failed
         if (!streamed) {
           if (typeof (storageClient as any).downloadAsBytes === 'function') {
             console.log(`⬇️ Falling back to bytes download for: ${streamKey}`);
-            const bytesRes: any = await (storageClient as any).downloadAsBytes(streamKey);
-            const bytes: Uint8Array = (bytesRes && bytesRes.value) ? bytesRes.value : bytesRes;
-            const buf = Buffer.from(bytes);
-            res.setHeader('Content-Length', String(buf.length));
-            return res.end(buf);
+            try {
+              const bytesRes: any = await (storageClient as any).downloadAsBytes(streamKey);
+              
+              if (!bytesRes.ok) {
+                console.error(`❌ Bytes download failed: ${bytesRes.error}`);
+                return res.status(500).json({ message: "Download failed", error: bytesRes.error });
+              }
+              
+              const bytes: Uint8Array = bytesRes.value;
+              const buf = Buffer.from(bytes);
+              
+              // Set content length for proper download
+              res.setHeader('Content-Length', String(buf.length));
+              console.log(`✅ Sending ${buf.length} bytes for: ${document.fileName}`);
+              
+              return res.end(buf);
+            } catch (bytesErr) {
+              console.error(`❌ Bytes download error:`, bytesErr);
+              return res.status(500).json({ message: "Download error", error: bytesErr instanceof Error ? bytesErr.message : String(bytesErr) });
+            }
           } else {
             console.error(`❌ Storage client does not support downloadAsBytes and streaming was unavailable.`);
-            return res.status(500).json({ message: "Storage client cannot stream file" });
+            return res.status(500).json({ message: "Storage client cannot download file" });
           }
         }
         

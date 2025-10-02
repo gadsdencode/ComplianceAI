@@ -11,10 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Document, UserDocument } from '@/types';
-import { Plus, Filter, Search, FileText, FolderPlus, Star, Download, Eye, Edit, Trash2, Share2, Calendar, User, Clock, Tag, X, ExternalLink } from 'lucide-react';
+import { Plus, Filter, Search, FileText, FolderPlus, Star, Download, Eye, Edit, Trash2, Share2, Calendar, User, Clock, Tag, X, ExternalLink, Edit3, Copy } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
+import UserDocumentEditModal from '@/components/documents/UserDocumentEditModal';
+import CreateTemplateFromDocumentModal from '@/components/templates/CreateTemplateFromDocumentModal';
 
 interface UnifiedDocument {
   id: number;
@@ -33,6 +35,8 @@ export default function DocumentsPage() {
   const [documentType, setDocumentType] = useState<'all' | 'compliance' | 'user'>('all');
   const [selectedDocument, setSelectedDocument] = useState<UnifiedDocument | null>(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<UserDocument | null>(null);
+  const [creatingTemplateFromDocument, setCreatingTemplateFromDocument] = useState<UnifiedDocument | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -140,6 +144,66 @@ export default function DocumentsPage() {
     if (currentCategory === newCategory) return;
     
     moveDocumentMutation.mutate({ documentId, newCategory, currentCategory });
+  };
+
+  // Edit document mutation
+  const editDocumentMutation = useMutation({
+    mutationFn: async ({ documentId, updates }: {
+      documentId: number;
+      updates: Partial<UserDocument>;
+    }) => {
+      const response = await fetch(`/api/user-documents/${documentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update document');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      // Update the cache with the new data
+      queryClient.setQueryData(['/api/user-documents'], (oldData: UserDocument[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map(doc => 
+          doc.id === variables.documentId 
+            ? { ...doc, ...variables.updates, updatedAt: new Date().toISOString() }
+            : doc
+        );
+      });
+
+      toast({
+        title: "Document Updated",
+        description: "Document has been updated successfully",
+      });
+
+      setEditingDocument(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleEditDocument = (document: UnifiedDocument) => {
+    if (document.type === 'user') {
+      setEditingDocument(document.document as UserDocument);
+    }
+  };
+
+  const handleSaveDocumentEdit = (documentId: number, updates: Partial<UserDocument>) => {
+    editDocumentMutation.mutate({ documentId, updates });
+  };
+
+  const handleCreateTemplateFromDocument = (document: UnifiedDocument) => {
+    setCreatingTemplateFromDocument(document);
   };
 
   const handleViewDocument = (document: UnifiedDocument) => {
@@ -562,6 +626,24 @@ export default function DocumentsPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {doc.type === 'user' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditDocument(doc)}
+                              title="Edit document"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCreateTemplateFromDocument(doc)}
+                            title="Create template from document"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -600,6 +682,26 @@ export default function DocumentsPage() {
 
       {/* Document Viewer Modal */}
       <DocumentViewer />
+
+      {/* Document Edit Modal */}
+      {editingDocument && (
+        <UserDocumentEditModal
+          document={editingDocument}
+          isOpen={!!editingDocument}
+          onClose={() => setEditingDocument(null)}
+          onSave={handleSaveDocumentEdit}
+          isSaving={editDocumentMutation.isPending}
+        />
+      )}
+
+      {/* Create Template from Document Modal */}
+      {creatingTemplateFromDocument && (
+        <CreateTemplateFromDocumentModal
+          document={creatingTemplateFromDocument}
+          isOpen={!!creatingTemplateFromDocument}
+          onClose={() => setCreatingTemplateFromDocument(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }

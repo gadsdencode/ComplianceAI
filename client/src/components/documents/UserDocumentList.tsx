@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { UserDocument } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
-import { FileText, Eye, Download, Trash2, AlertTriangle, Search, GripVertical, Loader2 } from 'lucide-react';
+import { FileText, Eye, Download, Trash2, AlertTriangle, Search, GripVertical, Loader2, Edit3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -19,6 +19,7 @@ interface UserDocumentListProps {
   error?: string;
   onDelete: (document: UserDocument) => Promise<void>;
   onView: (document: UserDocument) => void;
+  onEdit?: (document: UserDocument) => void;
   onMoveDocument?: (documentId: number, newCategory: string) => Promise<void>;
 }
 
@@ -28,6 +29,7 @@ export default function UserDocumentList({
   error, 
   onDelete,
   onView,
+  onEdit,
   onMoveDocument 
 }: UserDocumentListProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -432,6 +434,19 @@ export default function UserDocumentList({
                               <span className="sr-only">View</span>
                             </Button>
                           </motion.div>
+                          {onEdit && (
+                            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0 hover:bg-purple-50 hover:text-purple-600"
+                                onClick={() => onEdit(document)}
+                              >
+                                <Edit3 className="h-4 w-4" />
+                                <span className="sr-only">Edit</span>
+                              </Button>
+                            </motion.div>
+                          )}
                           <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
                             <Button 
                               variant="ghost" 

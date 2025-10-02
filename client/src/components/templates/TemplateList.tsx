@@ -5,19 +5,23 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Template } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
-import { FileText, User, Calendar, Eye, Copy, X } from 'lucide-react';
+import { FileText, User, Calendar, Eye, Copy, X, Edit3, Trash2, MoreHorizontal, Download } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface TemplateListProps {
   templates: Template[];
   isLoading: boolean;
   error?: string;
+  onEdit?: (template: Template) => void;
+  onDelete?: (template: Template) => void;
+  onDuplicate?: (template: Template) => void;
 }
 
-export default function TemplateList({ templates, isLoading, error }: TemplateListProps) {
+export default function TemplateList({ templates, isLoading, error, onEdit, onDelete, onDuplicate }: TemplateListProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
@@ -32,6 +36,31 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
 
   const handlePreviewTemplate = (template: Template) => {
     setPreviewTemplate(template);
+  };
+
+  const handleDownloadTemplate = (template: Template) => {
+    const blob = new Blob([template.content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${template.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: 'Template Downloaded',
+      description: `${template.name} has been downloaded as a markdown file.`
+    });
+  };
+
+  const handleCopyTemplate = (template: Template) => {
+    navigator.clipboard.writeText(template.content);
+    toast({
+      title: 'Template Copied',
+      description: `${template.name} content has been copied to clipboard.`
+    });
   };
 
   if (isLoading) {
@@ -135,6 +164,45 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
                       <Copy className="h-4 w-4 mr-1" />
                       Use Template
                     </Button>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleCopyTemplate(template)}>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Content
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownloadTemplate(template)}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </DropdownMenuItem>
+                        {onDuplicate && (
+                          <DropdownMenuItem onClick={() => onDuplicate(template)}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Duplicate
+                          </DropdownMenuItem>
+                        )}
+                        {onEdit && !template.isDefault && (
+                          <DropdownMenuItem onClick={() => onEdit(template)}>
+                            <Edit3 className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && !template.isDefault && (
+                          <DropdownMenuItem 
+                            onClick={() => onDelete(template)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
@@ -159,7 +227,7 @@ export default function TemplateList({ templates, isLoading, error }: TemplateLi
               Previewing document template in markdown format
             </p>
           </DialogHeader>
-          <div className="px-6 pb-6 overflow-y-auto flex-grow" style={{ maxHeight: "calc(90vh - 100px)" }}>
+          <div className="px-6 pb-6 overflow-y-auto flex-grow max-h-[calc(90vh-100px)]">
             <div className="p-4 border rounded-md bg-white">
               <div className="prose max-w-none prose-slate prose-headings:font-semibold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-p:text-base prose-a:text-primary-600">
                 {previewTemplate && <ReactMarkdown>{previewTemplate.content}</ReactMarkdown>}
