@@ -174,15 +174,15 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
-          <p className="text-slate-600">Your compliance overview and quick actions</p>
+          <h1 className="text-3xl font-bold text-slate-900">Welcome back!</h1>
+          <p className="text-slate-600 mt-1">Here's what needs your attention today</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="hidden sm:flex">
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
-          <Button onClick={() => navigate('/documents')}>
+          <Button onClick={() => navigate('/documents')} className="shadow-sm">
             <Plus className="h-4 w-4 mr-2" />
             Create Document
           </Button>
@@ -201,59 +201,71 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-blue-50 to-blue-100">
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600">Total Documents</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm font-medium text-blue-700">Total Documents</p>
+                <p className="text-3xl font-bold text-blue-900 mt-1">
                   {isLoadingStats ? '...' : dashboardStats?.documents || 0}
                 </p>
+                <p className="text-xs text-blue-600 mt-1">All time</p>
               </div>
-              <FileText className="h-8 w-8 text-blue-600" />
+              <div className="h-12 w-12 rounded-full bg-blue-200 flex items-center justify-center">
+                <FileText className="h-6 w-6 text-blue-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100">
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600">Pending Actions</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm font-medium text-amber-700">Pending Actions</p>
+                <p className="text-3xl font-bold text-amber-900 mt-1">
                   {isLoadingStats ? '...' : dashboardStats?.pending || 0}
                 </p>
+                <p className="text-xs text-amber-600 mt-1">Needs attention</p>
               </div>
-              <Clock className="h-8 w-8 text-yellow-600" />
+              <div className="h-12 w-12 rounded-full bg-amber-200 flex items-center justify-center">
+                <Clock className="h-6 w-6 text-amber-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-emerald-100">
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600">Compliance Rate</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm font-medium text-emerald-700">Compliance Rate</p>
+                <p className="text-3xl font-bold text-emerald-900 mt-1">
                   {isLoadingStats ? '...' : `${dashboardStats?.complianceRate || 0}%`}
                 </p>
+                <p className="text-xs text-emerald-600 mt-1">Current status</p>
               </div>
-              <TrendingUp className="h-8 w-8 text-green-600" />
+              <div className="h-12 w-12 rounded-full bg-emerald-200 flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-emerald-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-red-50 to-red-100">
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600">Urgent Items</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm font-medium text-red-700">Urgent Items</p>
+                <p className="text-3xl font-bold text-red-900 mt-1">
                   {isLoadingStats ? '...' : dashboardStats?.urgentCount || 0}
                 </p>
+                <p className="text-xs text-red-600 mt-1">High priority</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-red-600" />
+              <div className="h-12 w-12 rounded-full bg-red-200 flex items-center justify-center">
+                <AlertTriangle className="h-6 w-6 text-red-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -268,43 +280,50 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5" />
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <CheckCircle className="h-4 w-4 text-blue-600" />
+                </div>
                 Quick Actions
               </CardTitle>
             </CardHeader>
             <CardContent>
               {filteredQuickActions.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  <CheckCircle className="mx-auto h-12 w-12 mb-4 text-green-500" />
-                  <p className="text-lg font-medium">All caught up!</p>
-                  <p className="text-sm">No pending actions at the moment</p>
+                <div className="text-center py-12">
+                  <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">All caught up!</h3>
+                  <p className="text-slate-600">No pending actions at the moment</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {filteredQuickActions.map((action) => (
                     <div
                       key={`${action.type}-${action.id}`}
                       className={cn(
-                        "flex items-center justify-between p-4 rounded-lg border transition-all hover:shadow-sm",
+                        "flex items-center justify-between p-5 rounded-xl border-2 transition-all hover:shadow-md hover:scale-[1.02]",
                         getPriorityColor(action.priority)
                       )}
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-4">
                         <div className="flex items-center space-x-2">
                           {getPriorityIcon(action.priority)}
                           {getTypeIcon(action.type)}
                         </div>
                         <div>
-                          <h4 className="font-medium text-slate-900">{action.title}</h4>
-                          <div className="flex items-center space-x-2 text-sm text-slate-600">
-                            <Badge variant="outline" className="text-xs">
+                          <h4 className="font-semibold text-slate-900 text-lg">{action.title}</h4>
+                          <div className="flex items-center space-x-3 text-sm text-slate-600 mt-1">
+                            <Badge variant="outline" className="text-xs font-medium">
                               {action.type}
                             </Badge>
                             {action.dueDate && (
-                              <span>Due {format(new Date(action.dueDate), 'MMM d')}</span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Due {format(new Date(action.dueDate), 'MMM d')}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -312,7 +331,7 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
                       <Button
                         size="sm"
                         onClick={() => handleQuickAction(action)}
-                        className="ml-4"
+                        className="ml-4 shadow-sm hover:shadow-md transition-shadow"
                       >
                         {action.actionLabel}
                       </Button>

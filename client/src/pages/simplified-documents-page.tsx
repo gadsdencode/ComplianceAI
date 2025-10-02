@@ -46,15 +46,15 @@ export default function SimplifiedDocumentsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Documents</h1>
-            <p className="text-slate-600">Manage all your documents, templates, and signatures</p>
+            <h1 className="text-3xl font-bold text-slate-900">Documents</h1>
+            <p className="text-slate-600 mt-1">Manage all your documents, templates, and signatures</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hidden sm:flex">
               <FolderPlus className="h-4 w-4 mr-2" />
               New Folder
             </Button>
-            <Button>
+            <Button className="shadow-sm">
               <Plus className="h-4 w-4 mr-2" />
               Create Document
             </Button>

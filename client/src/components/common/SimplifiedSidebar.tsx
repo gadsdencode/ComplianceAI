@@ -27,21 +27,21 @@ type SidebarLinkProps = {
 };
 
 const SidebarLink = ({ href, icon, label, isActive, onClick, badge }: SidebarLinkProps) => (
-  <li className="px-4 py-2 text-sm">
+  <li className="px-3 py-1">
     <Link 
       href={href} 
       onClick={onClick}
       className={cn(
-        "flex items-center p-2 rounded-md transition-colors relative",
+        "flex items-center p-3 rounded-xl transition-all duration-200 relative group",
         isActive
-          ? "text-white bg-slate-700"
-          : "text-slate-300 hover:bg-slate-700 hover:text-white"
+          ? "text-white bg-gradient-to-r from-primary-600 to-primary-700 shadow-lg"
+          : "text-slate-300 hover:bg-slate-700 hover:text-white hover:shadow-md"
       )}
     >
-      <span className="mr-2 text-lg">{icon}</span>
-      {label}
-      {badge && badge > 0 && (
-        <span className="ml-auto bg-red-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center">
+      <span className="mr-3 text-lg">{icon}</span>
+      <span className="font-medium">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-auto bg-red-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center font-semibold">
           {badge > 99 ? '99+' : badge}
         </span>
       )}
@@ -79,26 +79,22 @@ export default function SimplifiedSidebar() {
     { 
       href: "/", 
       icon: <LayoutDashboard size={20} />, 
-      label: "Dashboard",
-      badge: 0 // Could be populated with pending count
+      label: "Dashboard"
     },
     { 
       href: "/documents", 
       icon: <FileText size={20} />, 
-      label: "Documents",
-      badge: 0 // Could be populated with pending count
+      label: "Documents"
     },
     { 
       href: "/analytics", 
       icon: <BarChart3 size={20} />, 
-      label: "Analytics",
-      badge: 0
+      label: "Analytics"
     },
     { 
       href: "/calendar", 
       icon: <Calendar size={20} />, 
-      label: "Calendar",
-      badge: 0
+      label: "Calendar"
     },
   ];
 
@@ -107,16 +103,14 @@ export default function SimplifiedSidebar() {
     links.push({ 
       href: "/users", 
       icon: <Users size={20} />, 
-      label: "Users",
-      badge: 0
+      label: "Users"
     });
   }
 
   links.push({ 
     href: "/settings", 
     icon: <Settings size={20} />, 
-    label: "Settings",
-    badge: 0
+    label: "Settings"
   });
 
   return (
@@ -146,26 +140,26 @@ export default function SimplifiedSidebar() {
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="px-4 py-5 flex items-center justify-between border-b border-slate-700">
+        <div className="px-4 py-6 flex items-center justify-between border-b border-slate-700">
           <div className="flex items-center">
-            <div className="h-8 w-8 rounded-md bg-primary-600 flex items-center justify-center">
-              <CheckSquare className="text-white" size={20} />
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg">
+              <CheckSquare className="text-white" size={22} />
             </div>
-            <span className="ml-2 text-xl font-semibold">ComplianceAI</span>
+            <span className="ml-3 text-xl font-bold">ComplianceAI</span>
           </div>
-          <Button className="md:hidden text-white focus:outline-none" onClick={toggleMobileSidebar} title="Close sidebar">
+          <Button className="md:hidden text-white focus:outline-none hover:bg-slate-700 rounded-lg" onClick={toggleMobileSidebar} title="Close sidebar">
             <X size={20} />
           </Button>
         </div>
         
-        <div className="py-4 px-4 border-b border-slate-700">
+        <div className="py-5 px-4 border-b border-slate-700">
           <div className="flex items-center">
-            <div className="h-9 w-9 rounded-full bg-primary-700 flex items-center justify-center text-sm font-medium">
+            <div className="h-11 w-11 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-sm font-semibold shadow-lg">
               {getUserInitials()}
             </div>
-            <div className="ml-2">
-              <p className="text-sm font-medium">{user.name}</p>
-              <p className="text-xs text-slate-400">
+            <div className="ml-3">
+              <p className="text-sm font-semibold text-white">{user.name}</p>
+              <p className="text-xs text-slate-300">
                 {user.role === "admin" ? "Administrator" : 
                  user.role === "compliance_officer" ? "Compliance Officer" : 
                  "Employee"}
@@ -192,13 +186,13 @@ export default function SimplifiedSidebar() {
         
         <div className="border-t border-slate-700 p-4 mt-auto">
           <button 
-            className="flex items-center text-slate-300 hover:text-white text-sm w-full"
+            className="flex items-center text-slate-300 hover:text-white text-sm w-full p-3 rounded-xl hover:bg-slate-700 transition-all duration-200 group"
             onClick={handleLogout}
             disabled={logoutMutation.isPending}
           >
-            <LogOut className="text-lg mr-2" size={20} />
-            Sign Out
-            {logoutMutation.isPending && <span className="ml-2 spinner"></span>}
+            <LogOut className="text-lg mr-3" size={20} />
+            <span className="font-medium">Sign Out</span>
+            {logoutMutation.isPending && <span className="ml-auto spinner"></span>}
           </button>
         </div>
       </nav>

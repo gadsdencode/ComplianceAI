@@ -239,15 +239,15 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
       {/* Header with Quick Actions */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-800">All Documents</h2>
-          <p className="text-sm text-slate-600">Manage documents, templates, and signatures</p>
+          <h2 className="text-2xl font-bold text-slate-900">All Documents</h2>
+          <p className="text-slate-600 mt-1">Manage documents, templates, and signatures in one place</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="hidden sm:flex">
             <FolderPlus className="h-4 w-4 mr-2" />
             New Folder
           </Button>
-          <Button onClick={() => setIsCreatingDocument(true)}>
+          <Button onClick={() => setIsCreatingDocument(true)} className="shadow-sm">
             <Plus className="h-4 w-4 mr-2" />
             Create Document
           </Button>
@@ -301,39 +301,40 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
               <p className="text-sm">Try adjusting your search or filters</p>
             </div>
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-4">
               {filteredDocuments.map((doc) => (
-                <Card key={`${doc.type}-${doc.id}`} className="hover:shadow-md transition-all duration-200 group">
-                  <CardContent className="p-4">
+                <Card key={`${doc.type}-${doc.id}`} className="border-0 shadow-sm hover:shadow-md transition-all duration-200 group hover:scale-[1.01]">
+                  <CardContent className="p-5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1 min-w-0">
-                        <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                          <FileText className="h-5 w-5 text-slate-600" />
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center flex-shrink-0 shadow-sm">
+                          <FileText className="h-6 w-6 text-slate-700" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-slate-900 truncate">{doc.title}</h3>
-                          <div className="flex items-center space-x-2 mt-1">
+                          <h3 className="font-semibold text-slate-900 text-lg truncate">{doc.title}</h3>
+                          <div className="flex items-center space-x-2 mt-2">
                             {getTypeBadge(doc.type)}
                             {getStatusBadge(doc.status)}
                             {doc.category && (
-                              <Badge variant="outline" className="text-xs">{doc.category}</Badge>
+                              <Badge variant="outline" className="text-xs font-medium">{doc.category}</Badge>
                             )}
                           </div>
-                          <p className="text-sm text-slate-500 mt-1">
+                          <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
                             Updated {formatDistanceToNow(new Date(doc.updatedAt), { addSuffix: true })}
                           </p>
                         </div>
                       </div>
                       
                       {/* Quick Actions */}
-                      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         {getQuickActions(doc).map((action) => (
                           <Button
                             key={action.key}
                             variant="ghost"
                             size="sm"
                             onClick={() => handleQuickAction(action.key, doc)}
-                            className={cn("h-8 w-8 p-0", action.color)}
+                            className={cn("h-9 w-9 p-0 rounded-lg hover:bg-slate-100", action.color)}
                             title={action.label}
                           >
                             <action.icon className="h-4 w-4" />
@@ -342,7 +343,7 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+                          className="h-9 w-9 p-0 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           title="More options"
                         >
                           <MoreHorizontal className="h-4 w-4" />

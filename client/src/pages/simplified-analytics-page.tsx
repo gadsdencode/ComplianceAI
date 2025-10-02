@@ -82,15 +82,15 @@ export default function SimplifiedAnalyticsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Analytics & Reports</h1>
-            <p className="text-slate-600">Track compliance metrics and system activity</p>
+            <h1 className="text-3xl font-bold text-slate-900">Analytics & Reports</h1>
+            <p className="text-slate-600 mt-1">Track compliance metrics and system activity</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hidden sm:flex">
               <Filter className="h-4 w-4 mr-2" />
               Filter
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="shadow-sm">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>

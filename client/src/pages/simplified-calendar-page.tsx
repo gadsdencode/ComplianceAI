@@ -76,15 +76,15 @@ export default function SimplifiedCalendarPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Calendar</h1>
-            <p className="text-slate-600">Track deadlines and compliance schedules</p>
+            <h1 className="text-3xl font-bold text-slate-900">Calendar</h1>
+            <p className="text-slate-600 mt-1">Track deadlines and compliance schedules</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hidden sm:flex">
               <Filter className="h-4 w-4 mr-2" />
               Filter
             </Button>
-            <Button>
+            <Button className="shadow-sm">
               <Plus className="h-4 w-4 mr-2" />
               Add Deadline
             </Button>
