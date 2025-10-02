@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import Sidebar from "@/components/common/Sidebar";
+import SimplifiedSidebar from "@/components/common/SimplifiedSidebar";
 import Header from "@/components/common/Header";
 
 type DashboardLayoutProps = {
@@ -23,7 +23,7 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
-      <Sidebar />
+      <SimplifiedSidebar />
       
       <main className="flex-1 flex flex-col min-h-screen w-full">
         <Header 
