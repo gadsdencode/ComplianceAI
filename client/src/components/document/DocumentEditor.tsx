@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,8 +19,13 @@ export default function DocumentEditor({
   onCancel,
   isSaving
 }: DocumentEditorProps) {
-  const [editableContent, setEditableContent] = useState(content);
+  const [editableContent, setEditableContent] = useState(content || '');
   const [activeTab, setActiveTab] = useState('edit');
+
+  // Update content when prop changes
+  useEffect(() => {
+    setEditableContent(content || '');
+  }, [content]);
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setEditableContent(e.target.value);
@@ -81,7 +86,7 @@ export default function DocumentEditor({
               value={editableContent}
               onChange={handleContentChange}
               className="w-full min-h-[500px] font-mono text-sm p-4 border-0 focus-visible:ring-0 resize-none"
-              placeholder="Enter document content here..."
+              placeholder={editableContent ? "Enter document content here..." : "Start typing your document content here...\n\nYou can use Markdown formatting:\n\n# Heading 1\n## Heading 2\n### Heading 3\n\n**Bold text**\n*Italic text*\n\n- Bullet point 1\n- Bullet point 2\n\n1. Numbered item 1\n2. Numbered item 2\n\n[Link text](https://example.com)\n\n```\nCode block\n```"}
             />
           </TabsContent>
           

@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Document, DocumentVersion, Signature, AuditTrail } from '@/types';
-import { ArrowLeft, Clock, User, FileText, PenTool, History, CheckSquare } from 'lucide-react';
+import { ArrowLeft, Clock, User, FileText, PenTool, History, CheckSquare, Eye } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import DocumentDetail from '@/components/document/DocumentDetail';
 import SignaturePanel from '@/components/document/SignaturePanel';
@@ -31,12 +31,15 @@ export default function DocumentDetailPage() {
   const urlParams = new URLSearchParams(location.split('?')[1] || '');
   const actionParam = urlParams.get('action');
   
-  // Set active tab based on URL action
+  // Set active tab and editing state based on URL action
   useEffect(() => {
     if (actionParam === 'sign') {
       setActiveTab('signatures');
     } else if (actionParam === 'review' || actionParam === 'approve') {
       setActiveTab('details');
+    } else if (actionParam === 'edit') {
+      setActiveTab('details');
+      setIsEditing(true);
     }
   }, [actionParam]);
 
@@ -115,6 +118,10 @@ export default function DocumentDetailPage() {
     setIsEditing(true);
   };
 
+  const handlePreview = () => {
+    setIsEditing(false);
+  };
+
   const handleCancelEdit = () => {
     setIsEditing(false);
   };
@@ -162,6 +169,7 @@ export default function DocumentDetailPage() {
     );
   }
 
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft':
@@ -187,7 +195,14 @@ export default function DocumentDetailPage() {
           Back
         </Button>
         <h1 className="text-2xl font-bold text-slate-800">{document.title}</h1>
-        {getStatusBadge(document.status)}
+        {isEditing ? (
+          <Badge variant="outline" className="bg-blue-100 text-blue-800">
+            <FileText className="h-3 w-3 mr-1" />
+            Editing
+          </Badge>
+        ) : (
+          getStatusBadge(document.status)
+        )}
       </div>
 
       <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -270,12 +285,23 @@ export default function DocumentDetailPage() {
           <div className="mt-6">
             <TabsContent value="details">
               {isEditing ? (
-                <DocumentEditor 
-                  content={document.content} 
-                  onSave={handleSaveEdit}
-                  onCancel={handleCancelEdit}
-                  isSaving={updateDocumentMutation.isPending}
-                />
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <FileText className="h-5 w-5 text-blue-600 mr-2" />
+                      <div>
+                        <h3 className="text-sm font-medium text-blue-800">Edit Mode</h3>
+                        <p className="text-sm text-blue-600">You are now editing this document. Use the tabs below to switch between editing and preview modes.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <DocumentEditor 
+                    content={document.content || ''} 
+                    onSave={handleSaveEdit}
+                    onCancel={handleCancelEdit}
+                    isSaving={updateDocumentMutation.isPending}
+                  />
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div className="flex justify-end space-x-2">
@@ -294,10 +320,18 @@ export default function DocumentDetailPage() {
                       onClick={handleEdit}
                       disabled={document.status === 'active' || document.status === 'expired' || document.status === 'archived'}
                     >
-                      Edit Document
+                      <FileText className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={handlePreview}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Preview
                     </Button>
                   </div>
-                  <DocumentDetail content={document.content} />
+                  <DocumentDetail content={document.content || ''} />
                 </div>
               )}
             </TabsContent>
