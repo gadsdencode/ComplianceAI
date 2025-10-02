@@ -282,8 +282,7 @@ export default function DocumentDetailPage() {
             </TabsTrigger>
           </TabsList>
           
-          <div className="mt-6">
-            <TabsContent value="details">
+          <TabsContent value="details" className="mt-6">
               {isEditing ? (
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -362,7 +361,6 @@ export default function DocumentDetailPage() {
             <TabsContent value="files">
               <FileManagerPanel documentId={document.id} />
             </TabsContent>
-          </div>
         </Tabs>
       </div>
     </DashboardLayout>
