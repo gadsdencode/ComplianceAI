@@ -43,15 +43,36 @@ export default function DocumentDetailPage() {
     }
   }, [actionParam]);
 
-  // Fetch document details
+  // Determine document type from URL params or try both endpoints
+  const documentType = new URLSearchParams(window.location.search).get('type') as 'compliance' | 'user' | null;
+  
+  // Fetch document details - try compliance documents first, then user documents
   const { 
     data: document,
     isLoading: isLoadingDocument,
     error: documentError
-  } = useQuery<Document>({
+  } = useQuery<Document | any>({
     queryKey: [`/api/documents/${id}`],
-    enabled: !!id,
+    enabled: !!id && documentType !== 'user',
+    retry: false,
   });
+
+  // Fetch user document if compliance document not found or type is user
+  const { 
+    data: userDocument,
+    isLoading: isLoadingUserDocument,
+    error: userDocumentError
+  } = useQuery<any>({
+    queryKey: [`/api/user-documents/${id}`],
+    enabled: !!id && (documentType === 'user' || (!document && !isLoadingDocument)),
+    retry: false,
+  });
+
+  // Use the document that was found
+  const currentDocument = document || userDocument;
+  const isLoading = isLoadingDocument || isLoadingUserDocument;
+  const error = documentError || userDocumentError;
+
 
   // Fetch document versions
   const {
@@ -83,14 +104,18 @@ export default function DocumentDetailPage() {
   // Update document mutation
   const updateDocumentMutation = useMutation({
     mutationFn: async ({ content, status }: { content?: string, status?: string }) => {
+      // Determine the correct API endpoint based on document type
+      const endpoint = documentType === 'user' ? `/api/user-documents/${id}` : `/api/documents/${id}`;
       return await apiRequest(
         'PUT', 
-        `/api/documents/${id}`,
+        endpoint,
         { content, status, createdById: user?.id }
       );
     },
     onSuccess: () => {
+      // Invalidate queries for both document types
       queryClient.invalidateQueries({ queryKey: [`/api/documents/${id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/user-documents/${id}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/documents/${id}/versions`] });
       queryClient.invalidateQueries({ queryKey: [`/api/documents/${id}/audit`] });
       
@@ -111,7 +136,7 @@ export default function DocumentDetailPage() {
   });
 
   const handleBack = () => {
-    navigate('/document-repository');
+    navigate('/documents');
   };
 
   const handleEdit = () => {
@@ -139,7 +164,7 @@ export default function DocumentDetailPage() {
   };
 
   // Display error if document couldn't be loaded
-  if (documentError) {
+  if (error) {
     return (
       <DashboardLayout pageTitle="Document Details">
         <div className="p-8 text-center">
@@ -147,7 +172,7 @@ export default function DocumentDetailPage() {
             <FileText size={24} />
           </div>
           <h3 className="text-lg font-medium mb-2">Error loading document</h3>
-          <p className="text-slate-600 mb-4">{documentError.message || 'Failed to load document'}</p>
+          <p className="text-slate-600 mb-4">{error.message || 'Failed to load document'}</p>
           <Button onClick={handleBack}>
             Back to Document Repository
           </Button>
@@ -157,7 +182,7 @@ export default function DocumentDetailPage() {
   }
 
   // Display loading state
-  if (isLoadingDocument || !document) {
+  if (isLoading || !currentDocument) {
     return (
       <DashboardLayout pageTitle="Document Details">
         <div className="animate-pulse space-y-4">
@@ -194,14 +219,14 @@ export default function DocumentDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
-        <h1 className="text-2xl font-bold text-slate-800">{document.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-800">{currentDocument?.title}</h1>
         {isEditing ? (
           <Badge variant="outline" className="bg-blue-100 text-blue-800">
             <FileText className="h-3 w-3 mr-1" />
             Editing
           </Badge>
         ) : (
-          getStatusBadge(document.status)
+          getStatusBadge(currentDocument?.status)
         )}
       </div>
 
@@ -212,7 +237,7 @@ export default function DocumentDetailPage() {
               <Clock className="h-5 w-5 text-slate-400 mr-2" />
               <div>
                 <p className="text-sm text-slate-500">Last Updated</p>
-                <p className="font-medium">{formatDistanceToNow(new Date(document.updatedAt), { addSuffix: true })}</p>
+                <p className="font-medium">{formatDistanceToNow(new Date(currentDocument?.updatedAt), { addSuffix: true })}</p>
               </div>
             </div>
           </CardContent>
@@ -224,7 +249,7 @@ export default function DocumentDetailPage() {
               <User className="h-5 w-5 text-slate-400 mr-2" />
               <div>
                 <p className="text-sm text-slate-500">Created By</p>
-                <p className="font-medium">User ID: {document.createdById}</p>
+                <p className="font-medium">User ID: {currentDocument?.createdById}</p>
               </div>
             </div>
           </CardContent>
@@ -236,20 +261,20 @@ export default function DocumentDetailPage() {
               <FileText className="h-5 w-5 text-slate-400 mr-2" />
               <div>
                 <p className="text-sm text-slate-500">Version</p>
-                <p className="font-medium">{document.version}</p>
+                <p className="font-medium">{currentDocument?.version}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         
-        {document.expiresAt && (
+        {currentDocument?.expiresAt && (
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center">
                 <Clock className="h-5 w-5 text-slate-400 mr-2" />
                 <div>
                   <p className="text-sm text-slate-500">Expires</p>
-                  <p className="font-medium">{format(new Date(document.expiresAt), 'MMM d, yyyy')}</p>
+                  <p className="font-medium">{format(new Date(currentDocument?.expiresAt), 'MMM d, yyyy')}</p>
                 </div>
               </div>
             </CardContent>
@@ -295,7 +320,7 @@ export default function DocumentDetailPage() {
                     </div>
                   </div>
                   <DocumentEditor 
-                    content={document.content || ''} 
+                    content={currentDocument?.content || ''} 
                     onSave={handleSaveEdit}
                     onCancel={handleCancelEdit}
                     isSaving={updateDocumentMutation.isPending}
@@ -304,12 +329,12 @@ export default function DocumentDetailPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="flex justify-end space-x-2">
-                    {document.status === 'draft' && (
+                    {currentDocument?.status === 'draft' && (
                       <Button onClick={handleSubmitForSignature} disabled={updateDocumentMutation.isPending}>
                         Submit for Signature
                       </Button>
                     )}
-                    {document.status === 'pending_approval' && (user?.role === 'admin' || user?.role === 'compliance_officer') && (
+                    {currentDocument?.status === 'pending_approval' && (user?.role === 'admin' || user?.role === 'compliance_officer') && (
                       <Button onClick={handleApprove} disabled={updateDocumentMutation.isPending}>
                         Approve Document
                       </Button>
@@ -317,7 +342,7 @@ export default function DocumentDetailPage() {
                     <Button 
                       variant="outline" 
                       onClick={handleEdit}
-                      disabled={document.status === 'active' || document.status === 'expired' || document.status === 'archived'}
+                      disabled={currentDocument?.status === 'active' || currentDocument?.status === 'expired' || currentDocument?.status === 'archived'}
                     >
                       <FileText className="h-4 w-4 mr-1" />
                       Edit
@@ -330,17 +355,17 @@ export default function DocumentDetailPage() {
                       Preview
                     </Button>
                   </div>
-                  <DocumentDetail content={document.content || ''} />
+                  <DocumentDetail content={currentDocument?.content || ''} />
                 </div>
               )}
             </TabsContent>
             
             <TabsContent value="signatures">
               <SignaturePanel 
-                documentId={document.id} 
+                documentId={currentDocument?.id} 
                 signatures={signatures || []} 
                 isLoading={isLoadingSignatures}
-                documentStatus={document.status}
+                documentStatus={currentDocument?.status}
               />
             </TabsContent>
             
@@ -359,7 +384,7 @@ export default function DocumentDetailPage() {
             </TabsContent>
             
             <TabsContent value="files">
-              <FileManagerPanel documentId={document.id} />
+              <FileManagerPanel documentId={currentDocument?.id} />
             </TabsContent>
         </Tabs>
       </div>

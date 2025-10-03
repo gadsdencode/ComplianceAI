@@ -27,18 +27,30 @@ export default function SimplifiedDocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
 
+
   // Fetch recent documents for quick access
-  const { data: recentDocuments = [] } = useQuery<(Document | UserDocument)[]>({
+  const { data: recentDocuments = [], error: recentError } = useQuery<(Document | UserDocument)[]>({
     queryKey: ['/api/documents/recent'],
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const { data: starredDocuments = [] } = useQuery<(Document | UserDocument)[]>({
+  const { data: starredDocuments = [], error: starredError } = useQuery<(Document | UserDocument)[]>({
     queryKey: ['/api/documents/starred'],
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const { data: templates = [] } = useQuery<Template[]>({
+  const { data: templates = [], error: templatesError } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  // Handle errors gracefully
+  if (recentError || starredError || templatesError) {
+    console.error('Error loading documents:', { recentError, starredError, templatesError });
+  }
 
   return (
     <DashboardLayout pageTitle="Documents">

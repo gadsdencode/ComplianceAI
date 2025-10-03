@@ -24,6 +24,7 @@ import {
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DashboardStats, Document, UserDocument, ComplianceDeadline } from '@/types';
+import DocumentsWidget from './DocumentsWidget';
 
 interface SimplifiedDashboardProps {
   className?: string;
@@ -33,6 +34,7 @@ interface QuickActionItem {
   id: number;
   title: string;
   type: 'document' | 'deadline' | 'signature';
+  documentType?: 'compliance' | 'user'; // Add document type distinction
   status: string;
   priority: 'high' | 'medium' | 'low';
   dueDate?: string;
@@ -72,6 +74,7 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
         id: doc.id,
         title: doc.title,
         type: 'document',
+        documentType: 'compliance',
         status: doc.status,
         priority: doc.deadline && new Date(doc.deadline) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'high' : 'medium',
         dueDate: doc.deadline,
@@ -89,6 +92,7 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
           id: doc.id,
           title: doc.title,
           type: 'document',
+          documentType: 'user',
           status: doc.status,
           priority: 'medium',
           action: 'complete',
@@ -131,16 +135,16 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
     switch (action.type) {
       case 'document':
         if (action.action === 'review') {
-          navigate(`/documents/${action.id}?action=review`);
+          navigate(`/documents/${action.id}?action=review&type=${action.documentType}`);
         } else if (action.action === 'complete') {
-          navigate(`/documents/${action.id}?action=edit`);
+          navigate(`/documents/${action.id}?action=edit&type=${action.documentType}`);
         }
         break;
       case 'deadline':
         navigate(`/compliance/deadlines/${action.id}`);
         break;
       case 'signature':
-        navigate(`/documents/${action.id}?action=sign`);
+        navigate(`/documents/${action.id}?action=sign&type=${action.documentType}`);
         break;
     }
   };
@@ -426,6 +430,50 @@ export default function SimplifiedDashboard({ className }: SimplifiedDashboardPr
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Documents Widget Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DocumentsWidget />
+        
+        {/* Quick Stats Card */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              </div>
+              Quick Stats
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center p-3 rounded-lg bg-blue-50">
+                <p className="text-2xl font-bold text-blue-900">
+                  {isLoadingStats ? '...' : dashboardStats?.documents || 0}
+                </p>
+                <p className="text-xs text-blue-600">Total Documents</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-amber-50">
+                <p className="text-2xl font-bold text-amber-900">
+                  {isLoadingStats ? '...' : dashboardStats?.pending || 0}
+                </p>
+                <p className="text-xs text-amber-600">Pending Review</p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-200">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full"
+                onClick={() => navigate('/analytics')}
+              >
+                <TrendingUp className="h-4 w-4 mr-2" />
+                View Full Analytics
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

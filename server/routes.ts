@@ -273,6 +273,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error retrieving documents", error: error.message });
     }
   });
+
+  // Recent documents endpoint
+  app.get("/api/documents/recent", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const options: any = {
+        limit: 10,
+        sortBy: 'updatedAt',
+        sortOrder: 'desc'
+      };
+      
+      // Filter by user if not admin or compliance officer
+      if (req.user.role === "employee") {
+        options.createdById = req.user.id;
+      }
+      
+      const documents = await storage.listDocuments(options);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving recent documents", error: error.message });
+    }
+  });
+
+  // Starred documents endpoint (placeholder - would need starred field in database)
+  app.get("/api/documents/starred", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      // For now, return empty array since we don't have starred functionality
+      // In a real implementation, you'd filter by starred field
+      res.json([]);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving starred documents", error: error.message });
+    }
+  });
   
   app.get("/api/documents/:id", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
@@ -1895,6 +1935,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get single user document by ID
+  app.get("/api/user-documents/:id", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const documentId = parseInt(req.params.id);
+      if (isNaN(documentId)) {
+        return res.status(400).json({ message: "Invalid document ID" });
+      }
+      
+      const document = await storage.getUserDocument(documentId);
+      if (!document) {
+        return res.status(404).json({ message: "User document not found" });
+      }
+      
+      // Check if user has access to this document
+      if (document.userId !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'compliance_officer') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      res.json(document);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error retrieving user document", error: error.message });
+    }
+  });
+
   // Add document download endpoint
   app.get("/api/user-documents/:id/download", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {

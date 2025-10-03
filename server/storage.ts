@@ -38,6 +38,8 @@ export interface IStorage {
     status?: string;
     limit?: number;
     offset?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
   }): Promise<Document[]>;
   updateDocument(id: number, data: Partial<InsertDocument>): Promise<Document | undefined>;
   
@@ -245,6 +247,8 @@ export class DatabaseStorage implements IStorage {
     status?: string;
     limit?: number;
     offset?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
   } = {}): Promise<Document[]> {
     const baseQuery = db.select().from(documents);
     type QueryType = typeof baseQuery;
@@ -266,7 +270,19 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Apply sorting
-    query = query.orderBy(desc(documents.updatedAt)) as QueryType;
+    const sortBy = options.sortBy || 'updatedAt';
+    const sortOrder = options.sortOrder || 'desc';
+    
+    if (sortBy === 'updatedAt') {
+      query = query.orderBy(sortOrder === 'desc' ? desc(documents.updatedAt) : asc(documents.updatedAt)) as QueryType;
+    } else if (sortBy === 'createdAt') {
+      query = query.orderBy(sortOrder === 'desc' ? desc(documents.createdAt) : asc(documents.createdAt)) as QueryType;
+    } else if (sortBy === 'title') {
+      query = query.orderBy(sortOrder === 'desc' ? desc(documents.title) : asc(documents.title)) as QueryType;
+    } else {
+      // Default to updatedAt desc
+      query = query.orderBy(desc(documents.updatedAt)) as QueryType;
+    }
     
     // Apply pagination
     if (options.limit !== undefined) {

@@ -63,7 +63,7 @@ export default function ShareModal({
       
       if (isUserDocument) {
         // For user documents, create a generic share URL
-        url = `${baseUrl}/document-repository`;
+        url = `${baseUrl}/documents`;
       } else {
         // For compliance documents, link directly to the document
         url = `${baseUrl}/documents/${document.id}`;

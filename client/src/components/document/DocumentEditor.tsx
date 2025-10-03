@@ -22,6 +22,7 @@ export default function DocumentEditor({
   const [editableContent, setEditableContent] = useState(content || '');
   const [activeTab, setActiveTab] = useState('edit');
 
+
   // Update content when prop changes
   useEffect(() => {
     setEditableContent(content || '');
@@ -37,8 +38,8 @@ export default function DocumentEditor({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex justify-between items-center">
           <TabsList>
             <TabsTrigger value="edit">
               <FileText className="h-4 w-4 mr-1" />
@@ -49,54 +50,56 @@ export default function DocumentEditor({
               Preview
             </TabsTrigger>
           </TabsList>
-        </Tabs>
-        
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={isSaving}
-          >
-            <X className="h-4 w-4 mr-1" />
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-1" />
-                Save
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-      
-      <Card className="shadow">
-        <CardContent className="p-0">
-          <TabsContent value="edit" className="m-0">
-            <Textarea
-              value={editableContent}
-              onChange={handleContentChange}
-              className="w-full min-h-[500px] font-mono text-sm p-4 border-0 focus-visible:ring-0 resize-none"
-              placeholder={editableContent ? "Enter document content here..." : "Start typing your document content here...\n\nYou can use Markdown formatting:\n\n# Heading 1\n## Heading 2\n### Heading 3\n\n**Bold text**\n*Italic text*\n\n- Bullet point 1\n- Bullet point 2\n\n1. Numbered item 1\n2. Numbered item 2\n\n[Link text](https://example.com)\n\n```\nCode block\n```"}
-            />
-          </TabsContent>
           
-          <TabsContent value="preview" className="m-0">
-            <div className="p-6">
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              disabled={isSaving}
+            >
+              <X className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-1" />
+                  Save
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+        
+        <TabsContent value="edit" className="mt-4">
+          <Card className="shadow">
+            <CardContent className="p-0">
+              <Textarea
+                value={editableContent}
+                onChange={handleContentChange}
+                className="w-full min-h-[500px] font-mono text-sm p-4 border-0 focus-visible:ring-0 resize-none"
+                placeholder={editableContent ? "Enter document content here..." : "Start typing your document content here...\n\nYou can use Markdown formatting:\n\n# Heading 1\n## Heading 2\n### Heading 3\n\n**Bold text**\n*Italic text*\n\n- Bullet point 1\n- Bullet point 2\n\n1. Numbered item 1\n2. Numbered item 2\n\n[Link text](https://example.com)\n\n```\nCode block\n```"}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="preview" className="mt-4">
+          <Card className="shadow">
+            <CardContent className="p-6">
               <DocumentDetail content={editableContent} />
-            </div>
-          </TabsContent>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

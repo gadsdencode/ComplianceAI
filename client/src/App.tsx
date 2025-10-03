@@ -7,7 +7,7 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import AuthPage from "@/pages/auth-page";
 import SimplifiedDashboardPage from "@/pages/simplified-dashboard-page";
-import SimplifiedDocumentsPage from "@/pages/simplified-documents-page";
+import DocumentsPage from "@/pages/documents-page";
 import SimplifiedAnalyticsPage from "@/pages/simplified-analytics-page";
 import SimplifiedCalendarPage from "@/pages/simplified-calendar-page";
 import UsersPage from "@/pages/users-page";
@@ -19,7 +19,7 @@ function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={SimplifiedDashboardPage} />
-      <ProtectedRoute path="/documents" component={SimplifiedDocumentsPage} />
+      <ProtectedRoute path="/documents" component={DocumentsPage} />
       <ProtectedRoute path="/documents/:id" component={DocumentDetailPage} />
       <ProtectedRoute path="/analytics" component={SimplifiedAnalyticsPage} />
       <ProtectedRoute path="/calendar" component={SimplifiedCalendarPage} />

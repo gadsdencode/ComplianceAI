@@ -121,13 +121,13 @@ export default function DocumentsSection({
 
   // View all documents handler
   const handleViewAll = () => {
-    navigate('/document-repository');
+    navigate('/documents');
   };
 
   // Handle document click - different navigation for user vs compliance documents
   const handleDocumentClick = (doc: any) => {
     if (doc.isUserDocument) {
-      navigate('/document-repository'); // Navigate to document management workspace
+      navigate('/documents'); // Navigate to document management workspace
     } else {
       navigate(`/documents/${doc.id}`); // Navigate to compliance document detail
     }
@@ -136,7 +136,7 @@ export default function DocumentsSection({
   return (
     <section className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Pending Action Documents */}
-      <DocumentsCard title="Documents Requiring Action" viewAllHref="/document-repository?filter=pending">
+      <DocumentsCard title="Documents Requiring Action" viewAllHref="/documents?filter=pending">
         {pendingDocuments.length === 0 ? (
           <div className="text-center p-6 text-slate-500">
             <CheckSquare className="mx-auto h-8 w-8 text-slate-400 mb-2" />
@@ -167,7 +167,7 @@ export default function DocumentsSection({
                   variant="outline"
                   size="sm"
                   className="px-3 py-1 h-auto text-xs" 
-                  onClick={() => navigate(`/document-repository/${doc.id}`)}
+                  onClick={() => navigate(`/documents/${doc.id}`)}
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   View
@@ -175,7 +175,7 @@ export default function DocumentsSection({
                 <Button 
                   size="sm"
                   className="px-3 py-1 h-auto text-xs"
-                  onClick={() => navigate(`/document-repository/${doc.id}?action=${doc.actionType}`)}
+                  onClick={() => navigate(`/documents/${doc.id}?action=${doc.actionType}`)}
                 >
                   {doc.actionType === "sign" ? "Sign" : 
                    doc.actionType === "review" ? "Review" : "Approve"}
@@ -187,7 +187,7 @@ export default function DocumentsSection({
       </DocumentsCard>
       
       {/* Recent Documents */}
-      <DocumentsCard title="Recently Updated Documents" viewAllHref="/document-repository">
+      <DocumentsCard title="Recently Updated Documents" viewAllHref="/documents">
         {recentDocuments.length === 0 ? (
           <div className="text-center p-6 text-slate-500">
             <FileText className="mx-auto h-8 w-8 text-slate-400 mb-2" />

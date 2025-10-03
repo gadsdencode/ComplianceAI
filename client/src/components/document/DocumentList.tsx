@@ -103,7 +103,7 @@ export default function DocumentList({ documents, isLoading, error }: DocumentLi
         <Card 
           key={document.id} 
           className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => navigate(`/document-repository/${document.id}`)}
+          onClick={() => navigate(`/documents/${document.id}`)}
         >
           <CardContent className="p-0">
             <div className="p-4">
@@ -134,7 +134,7 @@ export default function DocumentList({ documents, isLoading, error }: DocumentLi
                   {getStatusBadge(document.status)}
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/document-repository/${document.id}`);
+                    navigate(`/documents/${document.id}`);
                   }}>
                     <Eye className="h-4 w-4" />
                     <span className="sr-only">View</span>

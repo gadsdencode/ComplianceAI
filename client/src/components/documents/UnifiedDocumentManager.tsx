@@ -55,16 +55,22 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
   const queryClient = useQueryClient();
 
   // Fetch all document types
-  const { data: complianceDocuments = [], isLoading: isLoadingCompliance } = useQuery<Document[]>({
+  const { data: complianceDocuments = [], isLoading: isLoadingCompliance, error: complianceError } = useQuery<Document[]>({
     queryKey: ['/api/documents', { status: activeTab !== 'all' ? activeTab : undefined }],
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const { data: userDocuments = [], isLoading: isLoadingUser } = useQuery<UserDocument[]>({
+  const { data: userDocuments = [], isLoading: isLoadingUser, error: userError } = useQuery<UserDocument[]>({
     queryKey: ['/api/user-documents'],
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const { data: templates = [], isLoading: isLoadingTemplates } = useQuery<Template[]>({
+  const { data: templates = [], isLoading: isLoadingTemplates, error: templatesError } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Combine and transform documents
@@ -294,6 +300,15 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
         <TabsContent value={activeTab} className="mt-6">
           {isLoadingCompliance || isLoadingUser || isLoadingTemplates ? (
             <div className="text-center py-8">Loading documents...</div>
+          ) : complianceError || userError || templatesError ? (
+            <div className="text-center py-8 text-red-600">
+              <FileText className="mx-auto h-12 w-12 mb-4" />
+              <p className="text-lg font-medium">Error loading documents</p>
+              <p className="text-sm">Please try refreshing the page</p>
+              {complianceError && <p className="text-xs mt-2">Compliance: {complianceError.message}</p>}
+              {userError && <p className="text-xs mt-2">User: {userError.message}</p>}
+              {templatesError && <p className="text-xs mt-2">Templates: {templatesError.message}</p>}
+            </div>
           ) : filteredDocuments.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <FileText className="mx-auto h-12 w-12 mb-4" />
