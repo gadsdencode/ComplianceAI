@@ -6,8 +6,8 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import AuthPage from "@/pages/auth-page";
-import SimplifiedDashboardPage from "@/pages/simplified-dashboard-page";
-import DocumentsPage from "@/pages/documents-page";
+import ModernDashboardPage from "@/pages/modern-dashboard-page";
+import ModernDocumentsPage from "@/pages/modern-documents-page";
 import SimplifiedAnalyticsPage from "@/pages/simplified-analytics-page";
 import SimplifiedCalendarPage from "@/pages/simplified-calendar-page";
 import UsersPage from "@/pages/users-page";
@@ -18,8 +18,8 @@ import DocumentDetailPage from "@/pages/document-detail-page";
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={SimplifiedDashboardPage} />
-      <ProtectedRoute path="/documents" component={DocumentsPage} />
+      <ProtectedRoute path="/" component={ModernDashboardPage} />
+      <ProtectedRoute path="/documents" component={ModernDocumentsPage} />
       <ProtectedRoute path="/documents/:id" component={DocumentDetailPage} />
       <ProtectedRoute path="/analytics" component={SimplifiedAnalyticsPage} />
       <ProtectedRoute path="/calendar" component={SimplifiedCalendarPage} />
