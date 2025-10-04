@@ -67,6 +67,26 @@ interface Document {
   expiresAt?: string;
 }
 
+interface UserDocument {
+  id: number;
+  userId: number;
+  title: string;
+  description?: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  fileUrl: string;
+  tags?: string[];
+  category?: string;
+  starred: boolean;
+  status: "draft" | "review" | "approved" | "archived";
+  isFolderPlaceholder: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type AllDocument = Document | UserDocument;
+
 // Real data will be fetched from API endpoints
 
 const statusConfig = {
@@ -74,7 +94,9 @@ const statusConfig = {
   pending_approval: { label: "Pending Approval", color: "bg-yellow-100 text-yellow-800", icon: Clock },
   active: { label: "Active", color: "bg-green-100 text-green-800", icon: CheckCircle2 },
   expired: { label: "Expired", color: "bg-red-100 text-red-800", icon: AlertTriangle },
-  archived: { label: "Archived", color: "bg-gray-100 text-gray-800", icon: Archive }
+  archived: { label: "Archived", color: "bg-gray-100 text-gray-800", icon: Archive },
+  review: { label: "Review", color: "bg-yellow-100 text-yellow-800", icon: Clock },
+  approved: { label: "Approved", color: "bg-green-100 text-green-800", icon: CheckCircle2 }
 };
 
 const priorityConfig = {
@@ -105,11 +127,20 @@ export default function ModernDocumentManager() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
-  // Real API calls
-  const { data: documents = [], isLoading } = useQuery<Document[]>({
+  // Real API calls - fetch from both compliance documents and user documents
+  const { data: complianceDocuments = [], isLoading: isLoadingCompliance } = useQuery<Document[]>({
     queryKey: ['/api/documents', { search: searchQuery, status: selectedStatus, category: selectedCategory, priority: selectedPriority, sortBy, sortOrder }],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  const { data: userDocuments = [], isLoading: isLoadingUser } = useQuery<UserDocument[]>({
+    queryKey: ['/api/user-documents'],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Combine both document types
+  const allDocuments = [...complianceDocuments, ...userDocuments];
+  const isLoading = isLoadingCompliance || isLoadingUser;
 
   const getStatusIcon = (status: string) => {
     const config = statusConfig[status as keyof typeof statusConfig];
@@ -147,7 +178,7 @@ export default function ModernDocumentManager() {
   };
 
   const handleDownloadDocument = (docId: number) => {
-    const doc = documents.find(d => d.id === docId);
+    const doc = allDocuments.find(d => d.id === docId);
     if (!doc) {
       toast({
         title: "Download Failed",
@@ -162,8 +193,10 @@ export default function ModernDocumentManager() {
       description: "Your document download has started.",
     });
     
-    // Create download link to real API endpoint
-    const downloadUrl = `/api/documents/${docId}/download`;
+    // Determine if this is a compliance document or user document
+    const isUserDocument = userDocuments.some(ud => ud.id === docId);
+    const downloadUrl = isUserDocument ? `/api/user-documents/${docId}/download` : `/api/documents/${docId}/download`;
+    
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = `${doc.title || 'document'}.pdf`;
@@ -174,7 +207,7 @@ export default function ModernDocumentManager() {
   };
 
   const handleShareDocument = (docId: number) => {
-    const doc = documents.find(d => d.id === docId);
+    const doc = allDocuments.find(d => d.id === docId);
     if (doc && navigator.share) {
       navigator.share({
         title: doc.title || 'Document',
@@ -193,11 +226,22 @@ export default function ModernDocumentManager() {
   };
 
   const handleDuplicateDocument = (docId: number) => {
-    const doc = documents.find(d => d.id === docId);
+    const doc = allDocuments.find(d => d.id === docId);
     if (!doc) {
       toast({
         title: "Duplicate Failed",
         description: "Document not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if this is a user document (user documents don't have duplicate functionality)
+    const isUserDocument = userDocuments.some(ud => ud.id === docId);
+    if (isUserDocument) {
+      toast({
+        title: "Duplicate Not Available",
+        description: "User documents cannot be duplicated. Create a new document instead.",
         variant: "destructive",
       });
       return;
@@ -233,7 +277,7 @@ export default function ModernDocumentManager() {
   };
 
   const handleDeleteDocument = (docId: number) => {
-    const doc = documents.find(d => d.id === docId);
+    const doc = allDocuments.find(d => d.id === docId);
     if (!doc) {
       toast({
         title: "Delete Failed",
@@ -243,26 +287,63 @@ export default function ModernDocumentManager() {
       return;
     }
 
+    // Check if this is a user document (user documents can be deleted)
+    const isUserDocument = userDocuments.some(ud => ud.id === docId);
+    
     if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
-      // For now, we'll show a message that deletion is not available for compliance documents
-      // In a real implementation, you might want to archive instead of delete
-      toast({
-        title: "Delete Not Available",
-        description: "Compliance documents cannot be deleted. Consider archiving instead.",
-        variant: "destructive",
-      });
-      
-      // If you want to implement archiving, you could call an archive API here
-      // queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      if (isUserDocument) {
+        // Delete user document
+        fetch(`/api/user-documents/${docId}`, {
+          method: 'DELETE',
+        })
+        .then(response => {
+          if (response.ok) {
+            toast({
+              title: "Document Deleted",
+              description: `"${doc.title}" has been deleted successfully.`,
+              variant: "destructive",
+            });
+            // Refresh the documents list
+            queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+          } else {
+            throw new Error('Failed to delete document');
+          }
+        })
+        .catch(error => {
+          toast({
+            title: "Delete Failed",
+            description: `Failed to delete "${doc.title}": ${error.message}`,
+            variant: "destructive",
+          });
+        });
+      } else {
+        // Compliance documents cannot be deleted
+        toast({
+          title: "Delete Not Available",
+          description: "Compliance documents cannot be deleted. Consider archiving instead.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const handleArchiveDocument = (docId: number) => {
-    const doc = documents.find(d => d.id === docId);
+    const doc = allDocuments.find(d => d.id === docId);
     if (!doc) {
       toast({
         title: "Archive Failed",
         description: "Document not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if this is a user document (user documents don't have archive functionality)
+    const isUserDocument = userDocuments.some(ud => ud.id === docId);
+    if (isUserDocument) {
+      toast({
+        title: "Archive Not Available",
+        description: "User documents cannot be archived. Consider deleting instead.",
         variant: "destructive",
       });
       return;
@@ -374,16 +455,19 @@ export default function ModernDocumentManager() {
   };
 
   const handleSelectAll = () => {
-    if (selectedDocuments.length === documents.length) {
+    if (selectedDocuments.length === allDocuments.length) {
       setSelectedDocuments([]);
     } else {
-      setSelectedDocuments(documents.map(doc => doc.id));
+      setSelectedDocuments(allDocuments.map(doc => doc.id));
     }
   };
 
-  const filteredDocuments = documents.filter(doc => {
+  const filteredDocuments = allDocuments.filter(doc => {
+    // Handle different field names for different document types
+    const content = 'content' in doc ? doc.content : ('description' in doc ? doc.description : '');
+    
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         doc.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (content || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (doc.category || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = selectedStatus === "all" || doc.status === selectedStatus;
@@ -574,18 +658,18 @@ export default function ModernDocumentManager() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Checkbox
-              checked={selectedDocuments.length === documents.length && documents.length > 0}
+              checked={selectedDocuments.length === allDocuments.length && allDocuments.length > 0}
               onCheckedChange={handleSelectAll}
             />
             <span className="text-sm text-slate-600">
-              Select all ({documents.length} documents)
+              Select all ({allDocuments.length} documents)
             </span>
           </div>
         </div>
         
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-600">
-            {filteredDocuments.length} of {documents.length} documents
+            {filteredDocuments.length} of {allDocuments.length} documents
           </span>
           <Separator orientation="vertical" className="h-4" />
           <Button
@@ -625,14 +709,14 @@ export default function ModernDocumentManager() {
                         <CardTitle className="text-lg line-clamp-2 group-hover:text-primary-600 transition-colors">
                           {doc.title}
                         </CardTitle>
-                        <CardDescription className="mt-1">
-                          v{doc.version} • {doc.category || 'General'}
-                        </CardDescription>
+        <CardDescription className="mt-1">
+          {('version' in doc ? `v${doc.version}` : '')} • {doc.category || 'General'}
+        </CardDescription>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Star size={16} className={doc.isStarred ? "fill-yellow-400 text-yellow-400" : ""} />
+                        <Star size={16} className={('starred' in doc && doc.starred) ? "fill-yellow-400 text-yellow-400" : ""} />
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -693,17 +777,17 @@ export default function ModernDocumentManager() {
                   </div>
 
                   {/* Expiration Date */}
-                  {doc.expiresAt && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock size={16} className="text-slate-400" />
-                      <span className="text-slate-600">Expires: {new Date(doc.expiresAt).toLocaleDateString()}</span>
-                      {new Date(doc.expiresAt) < new Date() && (
-                        <Badge className="bg-red-100 text-red-800 text-xs">
-                          Expired
-                        </Badge>
-                      )}
-                    </div>
-                  )}
+        {('expiresAt' in doc && doc.expiresAt) && (
+          <div className="flex items-center gap-2 text-sm">
+            <Clock size={16} className="text-slate-400" />
+            <span className="text-slate-600">Expires: {new Date(doc.expiresAt).toLocaleDateString()}</span>
+            {new Date(doc.expiresAt) < new Date() && (
+              <Badge className="bg-red-100 text-red-800 text-xs">
+                Expired
+              </Badge>
+            )}
+          </div>
+        )}
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
@@ -733,7 +817,7 @@ export default function ModernDocumentManager() {
                   <tr className="text-left">
                     <th className="p-4">
                       <Checkbox
-                        checked={selectedDocuments.length === documents.length && documents.length > 0}
+                        checked={selectedDocuments.length === allDocuments.length && allDocuments.length > 0}
                         onCheckedChange={handleSelectAll}
                       />
                     </th>
@@ -764,7 +848,7 @@ export default function ModernDocumentManager() {
                             </div>
                             <div>
                               <div className="font-medium text-slate-900">{doc.title}</div>
-                              <div className="text-sm text-slate-500">v{doc.version} • {doc.category || 'General'}</div>
+                              <div className="text-sm text-slate-500">{('version' in doc ? `v${doc.version}` : '')} • {doc.category || 'General'}</div>
                             </div>
                           </div>
                         </td>
@@ -778,10 +862,10 @@ export default function ModernDocumentManager() {
                           <div className="flex items-center gap-2">
                             <Avatar className="h-6 w-6">
                               <AvatarFallback className="text-xs">
-                                {doc.createdById.toString().slice(-2)}
+                                {('createdById' in doc ? doc.createdById : ('userId' in doc ? doc.userId : 0)).toString().slice(-2)}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm">User {doc.createdById}</span>
+                            <span className="text-sm">User {('createdById' in doc ? doc.createdById : ('userId' in doc ? doc.userId : 0))}</span>
                           </div>
                         </td>
                         <td className="p-4 text-sm text-slate-600">
