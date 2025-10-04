@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { toast } from '@/hooks/use-toast';
+import { getTimeBasedGreeting } from '@/lib/utils';
 import { 
   FileText, 
   Clock, 
@@ -241,7 +242,7 @@ export default function UltraModernDashboard() {
             <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
               <Sparkles className="h-5 w-5 text-blue-600" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900">Good morning!</h1>
+            <h1 className="text-3xl font-bold text-slate-900">{getTimeBasedGreeting()}</h1>
           </div>
           <p className="text-lg text-slate-600 mb-6 max-w-2xl">
             Here's your compliance overview. {dashboardStats?.pending && dashboardStats.pending > 0 

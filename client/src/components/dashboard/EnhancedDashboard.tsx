@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { getTimeBasedGreeting } from '@/lib/utils';
 import { 
   Plus, 
   Search, 
@@ -260,7 +261,7 @@ export default function EnhancedDashboard({ className }: EnhancedDashboardProps)
       {/* Enhanced Header */}
       <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-slate-900">Good morning!</h1>
+          <h1 className="text-3xl font-bold text-slate-900">{getTimeBasedGreeting()}</h1>
           <p className="text-slate-600 text-lg">Here's what needs your attention today</p>
         </div>
         <div className="flex gap-3">
