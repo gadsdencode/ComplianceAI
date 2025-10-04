@@ -3,7 +3,7 @@ import EnhancedDocumentManager from '@/components/documents/EnhancedDocumentMana
 
 export default function EnhancedDocumentsPage() {
   return (
-    <UnifiedLayout pageTitle="Documents">
+    <UnifiedLayout>
       <EnhancedDocumentManager />
     </UnifiedLayout>
   );

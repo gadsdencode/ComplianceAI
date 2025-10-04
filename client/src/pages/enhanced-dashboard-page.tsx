@@ -3,7 +3,7 @@ import EnhancedDashboard from '@/components/dashboard/EnhancedDashboard';
 
 export default function EnhancedDashboardPage() {
   return (
-    <UnifiedLayout pageTitle="Dashboard">
+    <UnifiedLayout>
       <EnhancedDashboard />
     </UnifiedLayout>
   );

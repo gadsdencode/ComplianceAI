@@ -3,7 +3,7 @@ import MinimalDashboard from '@/components/dashboard/MinimalDashboard';
 
 export default function MinimalDashboardPage() {
   return (
-    <UnifiedLayout pageTitle="Dashboard">
+    <UnifiedLayout>
       <MinimalDashboard />
     </UnifiedLayout>
   );

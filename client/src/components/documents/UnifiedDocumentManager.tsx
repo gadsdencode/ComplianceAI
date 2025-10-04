@@ -22,7 +22,8 @@ import {
   Trash2,
   FolderPlus,
   Filter,
-  MoreHorizontal
+  MoreHorizontal,
+  Clock
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -145,9 +146,9 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
     }
   };
 
-  const handleDownload = (document: UnifiedDocument) => {
-    if (document.type === 'user') {
-      const userDoc = document.document as UserDocument;
+  const handleDownload = (doc: UnifiedDocument) => {
+    if (doc.type === 'user') {
+      const userDoc = doc.document as UserDocument;
       const downloadUrl = `/api/user-documents/${userDoc.id}/download`;
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -169,9 +170,9 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
     }
   };
 
-  const handleShare = (document: UnifiedDocument) => {
+  const handleShare = (doc: UnifiedDocument) => {
     // Quick share functionality
-    const shareUrl = `${window.location.origin}/documents/${document.id}`;
+    const shareUrl = `${window.location.origin}/documents/${doc.id}`;
     navigator.clipboard.writeText(shareUrl);
     toast({
       title: "Link Copied",
@@ -179,7 +180,7 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
     });
   };
 
-  const handleCreateTemplate = (document: UnifiedDocument) => {
+  const handleCreateTemplate = (doc: UnifiedDocument) => {
     // Quick template creation
     toast({
       title: "Template Creation",

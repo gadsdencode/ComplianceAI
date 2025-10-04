@@ -101,8 +101,8 @@ export default function EnhancedDocumentManager({ className }: EnhancedDocumentM
         createdAt: doc.createdAt,
         type: 'compliance' as const,
         document: doc,
-        priority: doc.deadline && new Date(doc.deadline) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'high' : 'medium',
-        dueDate: doc.deadline
+        priority: 'medium' as const,
+        dueDate: undefined
       })),
       ...userDocuments.map(doc => ({
         id: doc.id,
@@ -113,7 +113,7 @@ export default function EnhancedDocumentManager({ className }: EnhancedDocumentM
         createdAt: doc.createdAt,
         type: 'user' as const,
         document: doc,
-        priority: doc.status === 'draft' ? 'high' : 'medium'
+        priority: doc.status === 'draft' ? 'high' as const : 'medium' as const
       })),
       ...templates.map(template => ({
         id: template.id,
@@ -200,9 +200,9 @@ export default function EnhancedDocumentManager({ className }: EnhancedDocumentM
     }
   };
 
-  const handleDownload = (document: UnifiedDocument) => {
-    if (document.type === 'user') {
-      const userDoc = document.document as UserDocument;
+  const handleDownload = (doc: UnifiedDocument) => {
+    if (doc.type === 'user') {
+      const userDoc = doc.document as UserDocument;
       const downloadUrl = `/api/user-documents/${userDoc.id}/download`;
       const link = document.createElement('a');
       link.href = downloadUrl;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, Search, Menu, User, Settings, LogOut, Zap, Target, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,8 @@ export default function EnhancedHeader({
   showUserMenu = true,
 }: EnhancedHeaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   const { user, logoutMutation } = useAuth();
 
   // Fetch notification counts for the badge
@@ -45,6 +47,25 @@ export default function EnhancedHeader({
   });
 
   const unreadCount = notificationCounts?.unread || 0;
+
+  // Handle scroll to hide/show header
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      // Hide header when scrolling down, show when scrolling up
+      if (currentScrollY > lastScrollY && currentScrollY > 100) {
+        setIsHeaderVisible(false);
+      } else {
+        setIsHeaderVisible(true);
+      }
+      
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -80,7 +101,9 @@ export default function EnhancedHeader({
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+    <header className={`bg-white border-b border-slate-200 fixed top-0 left-0 right-0 z-10 shadow-sm transition-transform duration-300 ease-in-out ${
+      isHeaderVisible ? 'translate-y-0' : '-translate-y-full'
+    }`}>
       <div className="px-4 md:px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Left side - Page title and breadcrumb */}
@@ -98,13 +121,13 @@ export default function EnhancedHeader({
           
           {/* Center - Search (if enabled) */}
           {showSearch && (
-            <div className="flex-1 max-w-md mx-8 hidden lg:block">
+            <div className="flex-1 max-w-lg mx-12 hidden lg:block">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <Input
                   type="text"
-                  placeholder="Search documents, tasks, and more..."
-                  className="pl-10 pr-4 py-2 w-full"
+                  placeholder="Search actions, documents, deadlines, or type a command..."
+                  className="pl-10 pr-4 py-2.5 w-full bg-slate-50 border-slate-200 focus:bg-white focus:border-primary-300 focus:ring-2 focus:ring-primary-100 transition-all duration-200"
                   value={searchQuery}
                   onChange={handleSearchChange}
                 />
@@ -212,8 +235,8 @@ export default function EnhancedHeader({
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <Input
                 type="text"
-                placeholder="Search documents, tasks, and more..."
-                className="pl-10 pr-4 py-2 w-full"
+                placeholder="Search actions, documents, deadlines, or type a command..."
+                className="pl-10 pr-4 py-2.5 w-full bg-slate-50 border-slate-200 focus:bg-white focus:border-primary-300 focus:ring-2 focus:ring-primary-100 transition-all duration-200"
                 value={searchQuery}
                 onChange={handleSearchChange}
               />

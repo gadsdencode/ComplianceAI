@@ -149,7 +149,7 @@ const getQuickActions = (navigate: (path: string) => void): QuickAction[] => [
 ];
 
 export default function DocumentSearch({ 
-  placeholder = "Search documents, deadlines, or type a command...",
+  placeholder = "Search actions, documents, deadlines, or type a command...",
   className,
   onDocumentSelect,
   showResults = true,
@@ -287,15 +287,15 @@ export default function DocumentSearch({
       const spaceBelow = viewportHeight - rect.bottom;
       const spaceAbove = rect.top;
       
-      let top = rect.bottom + window.scrollY + 4; // Default: below input
+      let top = rect.bottom + 4; // Default: below input (relative to viewport)
       
       // If not enough space below but enough above, position above
       if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-        top = rect.top + window.scrollY - dropdownHeight - 4;
+        top = rect.top - dropdownHeight - 4;
       }
       
       // Ensure dropdown doesn't go off-screen horizontally
-      let left = rect.left + window.scrollX;
+      let left = rect.left;
       const dropdownWidth = rect.width;
       
       if (left + dropdownWidth > viewportWidth) {
@@ -396,7 +396,10 @@ export default function DocumentSearch({
 
     const handleScroll = () => {
       if (isOpen) {
-        calculateDropdownPosition();
+        // Use requestAnimationFrame for smooth position updates during scroll
+        requestAnimationFrame(() => {
+          calculateDropdownPosition();
+        });
       }
     };
 
@@ -490,16 +493,27 @@ export default function DocumentSearch({
             className="fixed inset-0 z-dropdown-backdrop bg-black/5"
             onClick={() => setIsOpen(false)}
           />
+          {/* Visual connector triangle */}
+          <div
+            className="fixed z-dropdown w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-white drop-shadow-sm"
+            ref={(el) => {
+              if (el) {
+                el.style.top = `${dropdownPosition.top - 4}px`;
+                el.style.left = `${dropdownPosition.left + 20}px`;
+              }
+            }}
+          />
           <div
             ref={(el) => {
-              dropdownRef.current = el;
               if (el) {
                 el.style.top = `${dropdownPosition.top}px`;
                 el.style.left = `${dropdownPosition.left}px`;
                 el.style.width = `${dropdownPosition.width}px`;
+                el.style.borderTopLeftRadius = '0.5rem';
+                el.style.borderTopRightRadius = '0.5rem';
               }
             }}
-            className="fixed z-dropdown max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl isolate"
+            className="fixed z-dropdown min-h-32 max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl isolate animate-in fade-in-0 zoom-in-95 duration-200"
           >
           {isLoading && (
             <div className="flex items-center justify-center p-4">

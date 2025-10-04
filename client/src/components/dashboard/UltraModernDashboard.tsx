@@ -68,12 +68,12 @@ export default function UltraModernDashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: recentDocuments = [] } = useQuery({
+  const { data: recentDocuments = [] } = useQuery<any[]>({
     queryKey: ['/api/documents/recent'],
     staleTime: 2 * 60 * 1000,
   });
 
-  const { data: upcomingDeadlines = [] } = useQuery({
+  const { data: upcomingDeadlines = [] } = useQuery<any[]>({
     queryKey: ['/api/compliance-deadlines', { upcoming: true }],
     staleTime: 5 * 60 * 1000,
   });
@@ -118,7 +118,7 @@ export default function UltraModernDashboard() {
     const actions: QuickAction[] = [];
 
     // High priority actions
-    if (dashboardStats?.urgentCount > 0) {
+    if (dashboardStats?.urgentCount && dashboardStats.urgentCount > 0) {
       actions.push({
         id: 'urgent-review',
         title: 'Review Urgent Items',
@@ -130,7 +130,7 @@ export default function UltraModernDashboard() {
       });
     }
 
-    if (dashboardStats?.expiringCount > 0) {
+    if (dashboardStats?.expiringCount && dashboardStats.expiringCount > 0) {
       actions.push({
         id: 'expiring-docs',
         title: 'Expiring Documents',
@@ -143,7 +143,7 @@ export default function UltraModernDashboard() {
     }
 
     // Medium priority actions
-    if (dashboardStats?.pending > 0) {
+    if (dashboardStats?.pending && dashboardStats.pending > 0) {
       actions.push({
         id: 'pending-review',
         title: 'Pending Reviews',
@@ -244,7 +244,7 @@ export default function UltraModernDashboard() {
             <h1 className="text-3xl font-bold text-slate-900">Good morning!</h1>
           </div>
           <p className="text-lg text-slate-600 mb-6 max-w-2xl">
-            Here's your compliance overview. {dashboardStats?.pending > 0 
+            Here's your compliance overview. {dashboardStats?.pending && dashboardStats.pending > 0 
               ? `${dashboardStats.pending} items need your attention.` 
               : 'Everything looks great!'}
           </p>
@@ -252,7 +252,7 @@ export default function UltraModernDashboard() {
           {/* Quick Search */}
           <div className="max-w-md">
             <DocumentSearch 
-              placeholder="Search documents, deadlines..."
+              placeholder="Search actions, documents, deadlines, or type a command..."
               className="bg-white/80 backdrop-blur-sm border-white/20"
               maxResults={8}
             />
