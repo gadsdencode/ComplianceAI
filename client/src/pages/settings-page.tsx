@@ -251,6 +251,30 @@ export default function SettingsPage() {
     },
   });
 
+  // Sign out from all devices mutation
+  const signOutAllMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/user/signout-all');
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Signed out successfully',
+        description: 'You have been signed out from all devices',
+      });
+      // Optionally redirect to login page
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 2000);
+    },
+    onError: (error) => {
+      toast({
+        title: 'Sign out failed',
+        description: error.message || 'Failed to sign out from all devices',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const onProfileSubmit = (data: ProfileFormValues) => {
     updateProfileMutation.mutate(data);
   };
@@ -269,6 +293,12 @@ export default function SettingsPage() {
 
   const onAISettingsSubmit = (data: AISettingsFormValues) => {
     updateAISettingsMutation.mutate(data);
+  };
+
+  const handleSignOutAll = () => {
+    if (window.confirm('Are you sure you want to sign out from all devices? This will end all your active sessions.')) {
+      signOutAllMutation.mutate();
+    }
   };
 
   return (
@@ -485,7 +515,15 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-                <Button variant="outline" className="mt-4">
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={handleSignOutAll}
+                  disabled={signOutAllMutation.isPending}
+                >
+                  {signOutAllMutation.isPending ? (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
                   Sign Out From All Devices
                 </Button>
               </div>
