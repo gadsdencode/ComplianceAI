@@ -9,7 +9,6 @@ import {
   AlertTriangle, 
   TrendingUp,
   Plus,
-  Search,
   Calendar,
   Users,
   BarChart3,
@@ -20,6 +19,7 @@ import {
   Shield,
   Activity
 } from 'lucide-react';
+import DocumentSearch from '../common/DocumentSearch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -60,7 +60,6 @@ interface InsightCard {
 }
 
 export default function UltraModernDashboard() {
-  const [searchQuery, setSearchQuery] = useState('');
   const [, setLocation] = useLocation();
 
   // Fetch dashboard data
@@ -251,13 +250,11 @@ export default function UltraModernDashboard() {
           </p>
           
           {/* Quick Search */}
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
+          <div className="max-w-md">
+            <DocumentSearch 
               placeholder="Search documents, deadlines..."
-              className="pl-10 bg-white/80 backdrop-blur-sm border-white/20"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-white/80 backdrop-blur-sm border-white/20"
+              maxResults={8}
             />
           </div>
         </div>

@@ -13,7 +13,6 @@ import {
   Download,
   Share2,
   Filter,
-  Search,
   Grid3X3,
   List,
   MoreHorizontal,
@@ -39,6 +38,7 @@ import {
   Copy,
   ExternalLink
 } from "lucide-react";
+import DocumentSearch from "../common/DocumentSearch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -114,7 +114,6 @@ const categoryConfig = {
 };
 
 export default function ModernDocumentManager() {
-  const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -129,7 +128,7 @@ export default function ModernDocumentManager() {
 
   // Real API calls - fetch from both compliance documents and user documents
   const { data: complianceDocuments = [], isLoading: isLoadingCompliance } = useQuery<Document[]>({
-    queryKey: ['/api/documents', { search: searchQuery, status: selectedStatus, category: selectedCategory, priority: selectedPriority, sortBy, sortOrder }],
+    queryKey: ['/api/documents', { status: selectedStatus, category: selectedCategory, priority: selectedPriority, sortBy, sortOrder }],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -463,18 +462,11 @@ export default function ModernDocumentManager() {
   };
 
   const filteredDocuments = allDocuments.filter(doc => {
-    // Handle different field names for different document types
-    const content = 'content' in doc ? doc.content : ('description' in doc ? doc.description : '');
-    
-    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (content || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (doc.category || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
     const matchesStatus = selectedStatus === "all" || doc.status === selectedStatus;
     const matchesCategory = selectedCategory === "all" || doc.category === selectedCategory;
     // Note: Priority is not in the database schema, so we'll skip priority filtering for now
     
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesStatus && matchesCategory;
   });
 
   if (isLoading) {
@@ -522,15 +514,11 @@ export default function ModernDocumentManager() {
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
             <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search documents, authors, or tags..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+              <DocumentSearch 
+                placeholder="Search documents, authors, or tags..."
+                maxResults={5}
+                showResults={false}
+              />
             </div>
 
             {/* Quick Filters */}
@@ -928,8 +916,8 @@ export default function ModernDocumentManager() {
             <FileText size={48} className="mx-auto text-slate-400 mb-4" />
             <h3 className="text-lg font-medium text-slate-900 mb-2">No documents found</h3>
             <p className="text-slate-600 mb-6">
-              {searchQuery || selectedStatus !== "all" || selectedCategory !== "all" || selectedPriority !== "all"
-                ? "Try adjusting your search or filters to find what you're looking for."
+              {selectedStatus !== "all" || selectedCategory !== "all" || selectedPriority !== "all"
+                ? "Try adjusting your filters to find what you're looking for."
                 : "Get started by creating your first document."}
             </p>
             <Button className="bg-primary-600 hover:bg-primary-700">

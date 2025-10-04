@@ -6,7 +6,7 @@ import type {
   UserDocument, InsertUserDocument, Notification, InsertNotification
 } from "../shared/schema.js";
 import session from "express-session";
-import { eq, gt, desc, asc, and, sql } from "drizzle-orm";
+import { eq, gt, desc, asc, and, sql, like, or } from "drizzle-orm";
 import { db } from "./db.js";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db.js";
@@ -40,6 +40,11 @@ export interface IStorage {
     offset?: number;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
+  }): Promise<Document[]>;
+  searchDocuments(options: {
+    searchQuery: string;
+    createdById?: number;
+    limit?: number;
   }): Promise<Document[]>;
   updateDocument(id: number, data: Partial<InsertDocument>): Promise<Document | undefined>;
   
@@ -292,6 +297,51 @@ export class DatabaseStorage implements IStorage {
     if (options.offset !== undefined) {
       query = query.offset(options.offset) as QueryType;
     }
+    
+    return await query;
+  }
+  
+  async searchDocuments(options: {
+    searchQuery: string;
+    createdById?: number;
+    limit?: number;
+  }): Promise<Document[]> {
+    const { searchQuery, createdById, limit = 10 } = options;
+    
+    const baseQuery = db.select().from(documents);
+    type QueryType = typeof baseQuery;
+    
+    let query = baseQuery;
+    
+    // Apply filters
+    const filters = [];
+    
+    // User filter
+    if (createdById !== undefined) {
+      filters.push(eq(documents.createdById, createdById));
+    }
+    
+    // Search filter - search in title and content
+    const searchPattern = `%${searchQuery.toLowerCase()}%`;
+    filters.push(
+      or(
+        like(documents.title, searchPattern),
+        like(documents.content, searchPattern),
+        like(documents.category || '', searchPattern)
+      )!
+    );
+    
+    if (filters.length > 0) {
+      query = query.where(and(...filters)) as QueryType;
+    }
+    
+    // Order by relevance (title matches first, then content matches)
+    query = query.orderBy(
+      desc(documents.updatedAt) // Most recent first as secondary sort
+    ) as QueryType;
+    
+    // Apply limit
+    query = query.limit(limit) as QueryType;
     
     return await query;
   }

@@ -313,6 +313,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error retrieving starred documents", error: error.message });
     }
   });
+
+  // Document search endpoint
+  app.get("/api/documents/search", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { q: query, limit = 10 } = req.query;
+      
+      if (!query || typeof query !== 'string' || query.trim().length < 2) {
+        return res.json([]);
+      }
+      
+      const searchOptions: any = {
+        searchQuery: query.trim(),
+        limit: Math.min(parseInt(limit as string) || 10, 20) // Cap at 20 results
+      };
+      
+      // Filter by user if not admin or compliance officer
+      if (req.user.role === "employee") {
+        searchOptions.createdById = req.user.id;
+      }
+      
+      const documents = await storage.searchDocuments(searchOptions);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error searching documents", error: error.message });
+    }
+  });
   
   app.get("/api/documents/:id", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {

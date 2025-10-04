@@ -8,13 +8,13 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   Plus,
-  Search,
   ArrowRight,
   TrendingUp,
   Calendar,
   Users,
   BarChart3
 } from 'lucide-react';
+import DocumentSearch from '../common/DocumentSearch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -43,7 +43,6 @@ interface PriorityItem {
 }
 
 export default function MinimalDashboard() {
-  const [searchQuery, setSearchQuery] = useState('');
   const [, setLocation] = useLocation();
 
   // Fetch dashboard data
