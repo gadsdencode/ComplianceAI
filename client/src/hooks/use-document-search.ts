@@ -1,17 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-
-interface Document {
-  id: number;
-  title: string;
-  content: string;
-  status: 'draft' | 'pending_approval' | 'active' | 'expired' | 'archived';
-  category?: string;
-  createdAt: string;
-  updatedAt: string;
-  version: number;
-}
+import { Document } from '@/types';
 
 interface UseDocumentSearchOptions {
   maxResults?: number;
@@ -55,6 +45,19 @@ export function useDocumentSearch(options: UseDocumentSearchOptions = {}) {
     refetch
   } = useQuery<Document[]>({
     queryKey: ['/api/documents/search', { q: debouncedQuery }],
+    queryFn: async () => {
+      if (!debouncedQuery || debouncedQuery.trim().length < minQueryLength) {
+        return [];
+      }
+      const params = new URLSearchParams({ q: debouncedQuery });
+      const response = await fetch(`/api/documents/search?${params.toString()}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+      return response.json();
+    },
     enabled: debouncedQuery.length >= minQueryLength,
     staleTime: 30 * 1000, // 30 seconds
   });

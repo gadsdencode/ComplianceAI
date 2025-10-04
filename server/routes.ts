@@ -338,8 +338,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const documents = await storage.searchDocuments(searchOptions);
+      
       res.json(documents);
     } catch (error: any) {
+      console.error('❌ Search error:', error);
       res.status(500).json({ message: "Error searching documents", error: error.message });
     }
   });

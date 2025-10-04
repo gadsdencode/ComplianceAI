@@ -6,7 +6,7 @@ import type {
   UserDocument, InsertUserDocument, Notification, InsertNotification
 } from "../shared/schema.js";
 import session from "express-session";
-import { eq, gt, desc, asc, and, sql, like, or } from "drizzle-orm";
+import { eq, gt, desc, asc, and, sql, like, or, ilike } from "drizzle-orm";
 import { db } from "./db.js";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db.js";
@@ -321,13 +321,14 @@ export class DatabaseStorage implements IStorage {
       filters.push(eq(documents.createdById, createdById));
     }
     
-    // Search filter - search in title and content
-    const searchPattern = `%${searchQuery.toLowerCase()}%`;
+    // Search filter - search in title and content (case-insensitive)
+    const searchPattern = `%${searchQuery}%`;
+    
     filters.push(
       or(
-        like(documents.title, searchPattern),
-        like(documents.content, searchPattern),
-        like(documents.category || '', searchPattern)
+        ilike(documents.title, searchPattern),
+        ilike(documents.content, searchPattern),
+        ilike(documents.category || '', searchPattern)
       )!
     );
     
@@ -343,7 +344,9 @@ export class DatabaseStorage implements IStorage {
     // Apply limit
     query = query.limit(limit) as QueryType;
     
-    return await query;
+    const results = await query;
+    
+    return results;
   }
   
   async updateDocument(id: number, data: Partial<InsertDocument>): Promise<Document | undefined> {

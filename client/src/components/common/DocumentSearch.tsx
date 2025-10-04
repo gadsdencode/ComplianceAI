@@ -18,17 +18,8 @@ import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { Document } from '@/types';
 
-interface Document {
-  id: number;
-  title: string;
-  content: string;
-  status: 'draft' | 'pending_approval' | 'active' | 'expired' | 'archived';
-  category?: string;
-  createdAt: string;
-  updatedAt: string;
-  version: number;
-}
 
 interface DocumentSearchProps {
   placeholder?: string;
@@ -57,7 +48,7 @@ export default function DocumentSearch({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-  const [navigate] = useLocation();
+  const [, navigate] = useLocation();
   
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -86,6 +77,22 @@ export default function DocumentSearch({
   // Fetch search results
   const { data: searchResults = [], isLoading, error } = useQuery<Document[]>({
     queryKey: ['/api/documents/search', { q: debouncedQuery }],
+    queryFn: async () => {
+      if (!debouncedQuery || debouncedQuery.trim().length < 2) {
+        return [];
+      }
+      
+      const params = new URLSearchParams({ q: debouncedQuery });
+      const response = await fetch(`/api/documents/search?${params.toString()}`, {
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+      
+      return response.json();
+    },
     enabled: debouncedQuery.length >= 2,
     staleTime: 30 * 1000, // 30 seconds
   });
