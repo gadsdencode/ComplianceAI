@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { 
@@ -55,6 +56,7 @@ export default function DocumentSearch({
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const [navigate] = useLocation();
   
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,12 +90,54 @@ export default function DocumentSearch({
     staleTime: 30 * 1000, // 30 seconds
   });
 
+  // Calculate dropdown position
+  const calculateDropdownPosition = useCallback(() => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      
+      // Check if dropdown would go off-screen vertically
+      const dropdownHeight = 384; // max-h-96 = 24rem = 384px
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      
+      let top = rect.bottom + window.scrollY + 4; // Default: below input
+      
+      // If not enough space below but enough above, position above
+      if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+        top = rect.top + window.scrollY - dropdownHeight - 4;
+      }
+      
+      // Ensure dropdown doesn't go off-screen horizontally
+      let left = rect.left + window.scrollX;
+      const dropdownWidth = rect.width;
+      
+      if (left + dropdownWidth > viewportWidth) {
+        left = viewportWidth - dropdownWidth - 16; // 16px margin from edge
+      }
+      
+      if (left < 16) {
+        left = 16; // 16px margin from left edge
+      }
+      
+      setDropdownPosition({
+        top,
+        left,
+        width: rect.width
+      });
+    }
+  }, []);
+
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
     setIsOpen(value.length >= 2);
     setSelectedIndex(-1);
+    if (value.length >= 2) {
+      calculateDropdownPosition();
+    }
   };
 
   // Handle document selection
@@ -140,7 +184,7 @@ export default function DocumentSearch({
     }
   };
 
-  // Handle click outside
+  // Handle click outside and position updates
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -154,9 +198,30 @@ export default function DocumentSearch({
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    const handleResize = () => {
+      if (isOpen) {
+        calculateDropdownPosition();
+      }
+    };
+
+    const handleScroll = () => {
+      if (isOpen) {
+        calculateDropdownPosition();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('resize', handleResize);
+      window.addEventListener('scroll', handleScroll, true);
+      
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('scroll', handleScroll, true);
+      };
+    }
+  }, [isOpen, calculateDropdownPosition]);
 
   // Clear search
   const handleClear = () => {
@@ -178,7 +243,7 @@ export default function DocumentSearch({
   };
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative isolate", className)}>
       {/* Search Input */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -189,7 +254,12 @@ export default function DocumentSearch({
           value={query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => query.length >= 2 && setIsOpen(true)}
+          onFocus={() => {
+            if (query.length >= 2) {
+              setIsOpen(true);
+              calculateDropdownPosition();
+            }
+          }}
           className="pl-10 pr-10"
         />
         {query && (
@@ -204,12 +274,25 @@ export default function DocumentSearch({
         )}
       </div>
 
-      {/* Search Results Dropdown */}
-      {isOpen && showResults && (
-        <div
-          ref={dropdownRef}
-          className="absolute top-full left-0 right-0 z-50 mt-1 max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg"
-        >
+      {/* Search Results Dropdown - Rendered via Portal */}
+      {isOpen && showResults && createPortal(
+        <>
+          {/* Backdrop for better visibility */}
+          <div 
+            className="fixed inset-0 z-dropdown-backdrop bg-black/5"
+            onClick={() => setIsOpen(false)}
+          />
+          <div
+            ref={(el) => {
+              dropdownRef.current = el;
+              if (el) {
+                el.style.top = `${dropdownPosition.top}px`;
+                el.style.left = `${dropdownPosition.left}px`;
+                el.style.width = `${dropdownPosition.width}px`;
+              }
+            }}
+            className="fixed z-dropdown max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl isolate"
+          >
           {isLoading && (
             <div className="flex items-center justify-center p-4">
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -298,7 +381,9 @@ export default function DocumentSearch({
               <p className="text-sm text-slate-600">Type at least 2 characters to search</p>
             </div>
           )}
-        </div>
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );

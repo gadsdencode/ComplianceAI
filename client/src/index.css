@@ -19,4 +19,12 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  
+  .z-dropdown {
+    z-index: 9999;
+  }
+  
+  .z-dropdown-backdrop {
+    z-index: 9998;
+  }
 }
