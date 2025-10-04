@@ -55,111 +55,26 @@ import { cn } from "@/lib/utils";
 // Type definition for document
 interface Document {
   id: number;
-  title?: string;
-  status?: string;
-  author?: string;
-  lastModified?: string;
-  priority?: string;
+  title: string;
+  content: string;
+  status: "draft" | "pending_approval" | "active" | "expired" | "archived";
+  templateId?: number;
+  version: number;
+  createdById: number;
   category?: string;
-  version?: string;
-  size?: string;
-  tags?: string[];
-  assignedTo?: string | null;
-  dueDate?: string | null;
-  isStarred?: boolean;
-  folder?: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt?: string;
 }
 
-// Mock data - replace with actual API calls
-const mockDocuments: Document[] = [
-  {
-    id: 1,
-    title: "Q4 Compliance Report",
-    status: "review",
-    author: "Sarah Johnson",
-    lastModified: "2024-02-10T10:30:00Z",
-    priority: "high",
-    category: "Financial",
-    version: "2.1",
-    size: "2.4 MB",
-    tags: ["compliance", "quarterly", "financial"],
-    assignedTo: "Mike Chen",
-    dueDate: "2024-02-15",
-    isStarred: true,
-    folder: "Reports"
-  },
-  {
-    id: 2,
-    title: "Safety Protocol Update",
-    status: "approved",
-    author: "Mike Chen",
-    lastModified: "2024-02-09T14:20:00Z",
-    priority: "medium",
-    category: "Safety",
-    version: "1.3",
-    size: "1.8 MB",
-    tags: ["safety", "protocol", "update"],
-    assignedTo: "Emily Davis",
-    dueDate: "2024-02-20",
-    isStarred: false,
-    folder: "Policies"
-  },
-  {
-    id: 3,
-    title: "Employee Handbook 2024",
-    status: "draft",
-    author: "Emily Davis",
-    lastModified: "2024-02-08T09:15:00Z",
-    priority: "low",
-    category: "HR",
-    version: "3.0",
-    size: "5.2 MB",
-    tags: ["handbook", "hr", "2024"],
-    assignedTo: "Alex Rodriguez",
-    dueDate: "2024-02-25",
-    isStarred: false,
-    folder: "HR Documents"
-  },
-  {
-    id: 4,
-    title: "Data Privacy Policy",
-    status: "overdue",
-    author: "Alex Rodriguez",
-    lastModified: "2024-02-05T16:45:00Z",
-    priority: "high",
-    category: "Legal",
-    version: "1.0",
-    size: "3.1 MB",
-    tags: ["privacy", "legal", "data"],
-    assignedTo: "Sarah Johnson",
-    dueDate: "2024-02-08",
-    isStarred: true,
-    folder: "Legal"
-  },
-  {
-    id: 5,
-    title: "IT Security Guidelines",
-    status: "published",
-    author: "David Kim",
-    lastModified: "2024-02-07T11:30:00Z",
-    priority: "high",
-    category: "IT",
-    version: "2.0",
-    size: "4.7 MB",
-    tags: ["security", "it", "guidelines"],
-    assignedTo: null,
-    dueDate: null,
-    isStarred: false,
-    folder: "IT Policies"
-  }
-];
+// Real data will be fetched from API endpoints
 
 const statusConfig = {
   draft: { label: "Draft", color: "bg-slate-100 text-slate-800", icon: Edit3 },
-  review: { label: "In Review", color: "bg-yellow-100 text-yellow-800", icon: Clock },
-  approved: { label: "Approved", color: "bg-green-100 text-green-800", icon: CheckCircle2 },
-  published: { label: "Published", color: "bg-blue-100 text-blue-800", icon: FileCheck },
-  overdue: { label: "Overdue", color: "bg-red-100 text-red-800", icon: AlertTriangle }
+  pending_approval: { label: "Pending Approval", color: "bg-yellow-100 text-yellow-800", icon: Clock },
+  active: { label: "Active", color: "bg-green-100 text-green-800", icon: CheckCircle2 },
+  expired: { label: "Expired", color: "bg-red-100 text-red-800", icon: AlertTriangle },
+  archived: { label: "Archived", color: "bg-gray-100 text-gray-800", icon: Archive }
 };
 
 const priorityConfig = {
@@ -190,8 +105,8 @@ export default function ModernDocumentManager() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
-  // Mock API calls - replace with actual queries
-  const { data: documents = mockDocuments, isLoading } = useQuery<Document[]>({
+  // Real API calls
+  const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['/api/documents', { search: searchQuery, status: selectedStatus, category: selectedCategory, priority: selectedPriority, sortBy, sortOrder }],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -232,23 +147,30 @@ export default function ModernDocumentManager() {
   };
 
   const handleDownloadDocument = (docId: number) => {
-    // Mock download functionality
+    const doc = documents.find(d => d.id === docId);
+    if (!doc) {
+      toast({
+        title: "Download Failed",
+        description: "Document not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     toast({
       title: "Download Started",
       description: "Your document download has started.",
     });
     
-    // In a real app, this would trigger a download
-    const doc = documents.find(d => d.id === docId);
-    if (doc) {
-      // Simulate download
-      const link = document.createElement('a');
-      link.href = `#download-${docId}`;
-      link.download = `${doc.title || 'document'}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+    // Create download link to real API endpoint
+    const downloadUrl = `/api/documents/${docId}/download`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `${doc.title || 'document'}.pdf`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleShareDocument = (docId: number) => {
@@ -272,36 +194,110 @@ export default function ModernDocumentManager() {
 
   const handleDuplicateDocument = (docId: number) => {
     const doc = documents.find(d => d.id === docId);
-    if (doc) {
+    if (!doc) {
       toast({
-        title: "Document Duplicated",
-        description: `"${doc.title || 'Untitled'}" has been duplicated.`,
+        title: "Duplicate Failed",
+        description: "Document not found.",
+        variant: "destructive",
       });
-      // In a real app, this would create a copy via API
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to duplicate "${doc.title}"?`)) {
+      fetch(`/api/documents/${docId}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          toast({
+            title: "Document Duplicated",
+            description: `"${doc.title}" has been duplicated successfully.`,
+          });
+          // Refresh the documents list
+          queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+        } else {
+          throw new Error('Failed to duplicate document');
+        }
+      })
+      .catch(error => {
+        toast({
+          title: "Duplicate Failed",
+          description: `Failed to duplicate "${doc.title}": ${error.message}`,
+          variant: "destructive",
+        });
+      });
     }
   };
 
   const handleDeleteDocument = (docId: number) => {
     const doc = documents.find(d => d.id === docId);
-    if (doc && window.confirm(`Are you sure you want to delete "${doc.title || 'this document'}"?`)) {
+    if (!doc) {
       toast({
-        title: "Document Deleted",
-        description: `"${doc.title || 'Untitled'}" has been deleted.`,
+        title: "Delete Failed",
+        description: "Document not found.",
         variant: "destructive",
       });
-      // In a real app, this would call a delete API
-      queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
+      // For now, we'll show a message that deletion is not available for compliance documents
+      // In a real implementation, you might want to archive instead of delete
+      toast({
+        title: "Delete Not Available",
+        description: "Compliance documents cannot be deleted. Consider archiving instead.",
+        variant: "destructive",
+      });
+      
+      // If you want to implement archiving, you could call an archive API here
+      // queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
     }
   };
 
   const handleArchiveDocument = (docId: number) => {
     const doc = documents.find(d => d.id === docId);
-    if (doc) {
+    if (!doc) {
       toast({
-        title: "Document Archived",
-        description: `"${doc.title || 'Untitled'}" has been archived.`,
+        title: "Archive Failed",
+        description: "Document not found.",
+        variant: "destructive",
       });
-      // In a real app, this would call an archive API
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to archive "${doc.title}"?`)) {
+      // Update document status to archived
+      fetch(`/api/documents/${docId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'archived'
+        })
+      })
+      .then(response => {
+        if (response.ok) {
+          toast({
+            title: "Document Archived",
+            description: `"${doc.title}" has been archived.`,
+          });
+          // Refresh the documents list
+          queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+        } else {
+          throw new Error('Failed to archive document');
+        }
+      })
+      .catch(error => {
+        toast({
+          title: "Archive Failed",
+          description: `Failed to archive "${doc.title}": ${error.message}`,
+          variant: "destructive",
+        });
+      });
     }
   };
 
@@ -386,14 +382,15 @@ export default function ModernDocumentManager() {
   };
 
   const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = (doc.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (doc.author || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (doc.tags || []).some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         doc.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (doc.category || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
     const matchesStatus = selectedStatus === "all" || doc.status === selectedStatus;
     const matchesCategory = selectedCategory === "all" || doc.category === selectedCategory;
-    const matchesPriority = selectedPriority === "all" || doc.priority === selectedPriority;
+    // Note: Priority is not in the database schema, so we'll skip priority filtering for now
     
-    return matchesSearch && matchesStatus && matchesCategory && matchesPriority;
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
   if (isLoading) {
@@ -613,7 +610,6 @@ export default function ModernDocumentManager() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredDocuments.map((doc) => {
             const statusInfo = statusConfig[doc.status as keyof typeof statusConfig];
-            const priorityInfo = priorityConfig[doc.priority as keyof typeof priorityConfig];
             const categoryInfo = categoryConfig[doc.category as keyof typeof categoryConfig];
             
             return (
@@ -627,10 +623,10 @@ export default function ModernDocumentManager() {
                       />
                       <div className="flex-1">
                         <CardTitle className="text-lg line-clamp-2 group-hover:text-primary-600 transition-colors">
-                          {doc.title || 'Untitled Document'}
+                          {doc.title}
                         </CardTitle>
                         <CardDescription className="mt-1">
-                          v{doc.version || '1.0'} • {doc.size || 'Unknown size'}
+                          v{doc.version} • {doc.category || 'General'}
                         </CardDescription>
                       </div>
                     </div>
@@ -679,65 +675,33 @@ export default function ModernDocumentManager() {
                   {/* Status and Priority */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={statusInfo?.color || "bg-slate-100 text-slate-800"}>
-                      {getStatusIcon(doc.status || 'draft')}
-                      <span className="ml-1">{statusInfo?.label || doc.status || 'Unknown'}</span>
-                    </Badge>
-                    <Badge variant="outline" className={priorityInfo?.color || "bg-slate-100 text-slate-800"}>
-                      {priorityInfo?.label || doc.priority || 'Unknown'}
+                      {getStatusIcon(doc.status)}
+                      <span className="ml-1">{statusInfo?.label || doc.status}</span>
                     </Badge>
                     <Badge variant="outline" className={categoryInfo?.color || "bg-slate-100 text-slate-800"}>
-                      {doc.category || 'Uncategorized'}
+                      {doc.category || 'General'}
                     </Badge>
                   </div>
 
-                  {/* Tags */}
-                  {doc.tags && doc.tags.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {(doc.tags || []).slice(0, 3).map((tag, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          <Tag size={12} className="mr-1" />
-                          {tag}
-                        </Badge>
-                      ))}
-                      {(doc.tags || []).length > 3 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{(doc.tags || []).length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Author and Date */}
+                  {/* Created and Updated Date */}
                   <div className="flex items-center justify-between text-sm text-slate-600">
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-6 w-6">
-                        <AvatarFallback className="text-xs">
-                          {(doc.author || 'Unknown').split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span>{doc.author || 'Unknown Author'}</span>
+                      <Calendar size={16} className="text-slate-400" />
+                      <span>Created: {formatDate(doc.createdAt)}</span>
                     </div>
-                    <span>{formatDate(doc.lastModified || new Date().toISOString())}</span>
+                    <span>Updated: {formatDate(doc.updatedAt)}</span>
                   </div>
 
-                  {/* Due Date */}
-                  {doc.dueDate && (
+                  {/* Expiration Date */}
+                  {doc.expiresAt && (
                     <div className="flex items-center gap-2 text-sm">
-                      <Calendar size={16} className="text-slate-400" />
-                      <span className="text-slate-600">Due: {new Date(doc.dueDate).toLocaleDateString()}</span>
-                      {new Date(doc.dueDate) < new Date() && (
+                      <Clock size={16} className="text-slate-400" />
+                      <span className="text-slate-600">Expires: {new Date(doc.expiresAt).toLocaleDateString()}</span>
+                      {new Date(doc.expiresAt) < new Date() && (
                         <Badge className="bg-red-100 text-red-800 text-xs">
-                          Overdue
+                          Expired
                         </Badge>
                       )}
-                    </div>
-                  )}
-
-                  {/* Assigned To */}
-                  {doc.assignedTo && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <User size={16} className="text-slate-400" />
-                      <span className="text-slate-600">Assigned to: {doc.assignedTo}</span>
                     </div>
                   )}
 
@@ -775,16 +739,15 @@ export default function ModernDocumentManager() {
                     </th>
                     <th className="p-4 font-medium text-slate-600">Document</th>
                     <th className="p-4 font-medium text-slate-600">Status</th>
-                    <th className="p-4 font-medium text-slate-600">Author</th>
-                    <th className="p-4 font-medium text-slate-600">Last Modified</th>
-                    <th className="p-4 font-medium text-slate-600">Priority</th>
+                    <th className="p-4 font-medium text-slate-600">Created By</th>
+                    <th className="p-4 font-medium text-slate-600">Last Updated</th>
+                    <th className="p-4 font-medium text-slate-600">Category</th>
                     <th className="p-4 font-medium text-slate-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDocuments.map((doc) => {
                     const statusInfo = statusConfig[doc.status as keyof typeof statusConfig];
-                    const priorityInfo = priorityConfig[doc.priority as keyof typeof priorityConfig];
                     
                     return (
                       <tr key={doc.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -800,33 +763,33 @@ export default function ModernDocumentManager() {
                               <FileText size={20} className="text-slate-600" />
                             </div>
                             <div>
-                              <div className="font-medium text-slate-900">{doc.title || 'Untitled Document'}</div>
-                              <div className="text-sm text-slate-500">v{doc.version || '1.0'} • {doc.size || 'Unknown size'}</div>
+                              <div className="font-medium text-slate-900">{doc.title}</div>
+                              <div className="text-sm text-slate-500">v{doc.version} • {doc.category || 'General'}</div>
                             </div>
                           </div>
                         </td>
                         <td className="p-4">
                           <Badge className={statusInfo?.color || "bg-slate-100 text-slate-800"}>
-                            {getStatusIcon(doc.status || 'draft')}
-                            <span className="ml-1">{statusInfo?.label || doc.status || 'Unknown'}</span>
+                            {getStatusIcon(doc.status)}
+                            <span className="ml-1">{statusInfo?.label || doc.status}</span>
                           </Badge>
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             <Avatar className="h-6 w-6">
                               <AvatarFallback className="text-xs">
-                                {(doc.author || 'Unknown').split(' ').map(n => n[0]).join('')}
+                                {doc.createdById.toString().slice(-2)}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm">{doc.author || 'Unknown Author'}</span>
+                            <span className="text-sm">User {doc.createdById}</span>
                           </div>
                         </td>
                         <td className="p-4 text-sm text-slate-600">
-                          {formatDate(doc.lastModified || new Date().toISOString())}
+                          {formatDate(doc.updatedAt)}
                         </td>
                         <td className="p-4">
-                          <Badge variant="outline" className={priorityInfo?.color || "bg-slate-100 text-slate-800"}>
-                            {priorityInfo?.label || doc.priority || 'Unknown'}
+                          <Badge variant="outline" className="bg-slate-100 text-slate-800">
+                            {doc.category || 'General'}
                           </Badge>
                         </td>
                         <td className="p-4">
@@ -895,3 +858,4 @@ export default function ModernDocumentManager() {
     </div>
   );
 }
+

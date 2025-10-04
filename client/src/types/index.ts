@@ -9,7 +9,7 @@ export interface User {
 }
 
 // Document related types
-export type DocumentStatus = "draft" | "pending_approval" | "active" | "expired" | "archived" | "review" | "approved";
+export type DocumentStatus = "draft" | "pending_approval" | "active" | "expired" | "archived";
 
 export interface Document {
   id: number;
@@ -19,6 +19,7 @@ export interface Document {
   templateId?: number;
   version: number;
   createdById: number;
+  category?: string;
   createdAt: string;
   updatedAt: string;
   expiresAt?: string;

@@ -1,14 +1,53 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ModernLayout from '@/components/layouts/ModernLayout';
 import ModernDocumentManager from '@/components/documents/ModernDocumentManager';
 import { Button } from '@/components/ui/button';
 import { Plus, Upload, Filter, SortAsc } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 
 export default function ModernDocumentsPage() {
   const [, setLocation] = useLocation();
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // Add metadata
+      const metadata = {
+        title: file.name.split('.').slice(0, -1).join('.') || file.name,
+        description: `Uploaded document: ${file.name}`,
+        tags: ['uploaded']
+      };
+      formData.append('metadata', JSON.stringify(metadata));
+      
+      return await apiRequest('POST', '/api/user-documents/upload', formData, {
+        'Content-Type': 'multipart/form-data'
+      });
+    },
+    onSuccess: (data, file) => {
+      toast({
+        title: "Upload Successful",
+        description: `"${file.name}" has been uploaded successfully.`,
+      });
+      // Invalidate documents query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user-documents'] });
+    },
+    onError: (error: any, file) => {
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload "${file.name}": ${error.message || 'Unknown error'}`,
+        variant: "destructive",
+      });
+    }
+  });
 
   const handleCreateDocument = () => {
     setLocation('/documents?action=create');
@@ -19,7 +58,7 @@ export default function ModernDocumentsPage() {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = '.pdf,.doc,.docx,.txt,.rtf';
+    input.accept = '.pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx,.csv';
     
     input.onchange = (e) => {
       const files = (e.target as HTMLInputElement).files;
@@ -29,14 +68,9 @@ export default function ModernDocumentsPage() {
           description: `Uploading ${files.length} file(s)...`,
         });
         
-        // In a real app, this would upload the files
-        Array.from(files).forEach((file, index) => {
-          setTimeout(() => {
-            toast({
-              title: "Upload Complete",
-              description: `"${file.name}" has been uploaded successfully.`,
-            });
-          }, (index + 1) * 1000);
+        // Upload each file
+        Array.from(files).forEach((file) => {
+          uploadMutation.mutate(file);
         });
       }
     };
