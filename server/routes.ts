@@ -352,7 +352,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const document = await storage.getDocument(parseInt(req.params.id));
+      // Validate that the ID is a valid number
+      const documentId = parseInt(req.params.id);
+      if (isNaN(documentId)) {
+        return res.status(400).json({ message: "Invalid document ID" });
+      }
+      
+      const document = await storage.getDocument(documentId);
       
       if (!document) {
         return res.status(404).json({ message: "Document not found" });
@@ -2304,6 +2310,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const documentId = parseInt(req.params.id);
+      if (isNaN(documentId)) {
+        return res.status(400).json({ message: "Invalid document ID" });
+      }
       
       // Get document metadata
       const document = await storage.getUserDocument(documentId);

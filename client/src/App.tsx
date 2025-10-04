@@ -15,6 +15,7 @@ import SimplifiedCalendarPage from "@/pages/simplified-calendar-page";
 import UsersPage from "@/pages/users-page";
 import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
+import DocumentCreationPage from "@/pages/document-creation-page";
 
 
 function Router() {
@@ -24,6 +25,7 @@ function Router() {
       <ProtectedRoute path="/dashboard/minimal" component={MinimalDashboardPage} />
       <ProtectedRoute path="/dashboard/modern" component={ModernDashboardPage} />
       <ProtectedRoute path="/documents" component={ModernDocumentsPage} />
+      <ProtectedRoute path="/documents/new" component={DocumentCreationPage} />
       <ProtectedRoute path="/documents/:id" component={DocumentDetailPage} />
       <ProtectedRoute path="/analytics" component={SimplifiedAnalyticsPage} />
       <ProtectedRoute path="/calendar" component={SimplifiedCalendarPage} />
