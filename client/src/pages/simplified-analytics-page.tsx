@@ -20,10 +20,13 @@ import {
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Document, Signature, AuditTrail, ComplianceDeadline } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SimplifiedAnalyticsPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [timeRange, setTimeRange] = useState('30d');
+  const [showFilters, setShowFilters] = useState(false);
+  const { toast } = useToast();
 
   // Fetch analytics data
   const { data: documents = [], isLoading: isLoadingDocuments } = useQuery<Document[]>({
@@ -31,16 +34,56 @@ export default function SimplifiedAnalyticsPage() {
   });
 
   const { data: signatures = [], isLoading: isLoadingSignatures } = useQuery<Signature[]>({
-    queryKey: ['/api/signatures'],
+    queryKey: ['/api/analytics/signatures'],
   });
 
   const { data: auditTrail = [], isLoading: isLoadingAudit } = useQuery<AuditTrail[]>({
-    queryKey: ['/api/audit-trail'],
+    queryKey: ['/api/analytics/audit-trail'],
   });
 
   const { data: deadlines = [], isLoading: isLoadingDeadlines } = useQuery<ComplianceDeadline[]>({
     queryKey: ['/api/compliance-deadlines'],
   });
+
+  // Export functionality
+  const handleExport = async (type: string = 'all', format: string = 'json') => {
+    try {
+      const response = await fetch(`/api/analytics/export?type=${type}&format=${format}`);
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics-export-${type}-${new Date().toISOString().split('T')[0]}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({
+        title: "Export Successful",
+        description: `Analytics data exported as ${format.toUpperCase()}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export analytics data. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Filter functionality
+  const handleFilter = () => {
+    setShowFilters(!showFilters);
+    toast({
+      title: "Filter Options",
+      description: showFilters ? "Filters hidden" : "Filter options displayed",
+    });
+  };
 
   // Calculate metrics
   const metrics = {
@@ -52,6 +95,9 @@ export default function SimplifiedAnalyticsPage() {
     avgProcessingTime: 2.5, // This would be calculated from audit trail
     monthlyGrowth: 12.5 // This would be calculated from historical data
   };
+
+  // Loading state
+  const isLoading = isLoadingDocuments || isLoadingSignatures || isLoadingAudit || isLoadingDeadlines;
 
   const recentActivity = auditTrail
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -76,6 +122,19 @@ export default function SimplifiedAnalyticsPage() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <DashboardLayout pageTitle="Analytics">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading analytics data...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout pageTitle="Analytics">
       <div className="space-y-6">
@@ -86,16 +145,108 @@ export default function SimplifiedAnalyticsPage() {
             <p className="text-slate-600 mt-1">Track compliance metrics and system activity</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="hidden sm:flex">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hidden sm:flex"
+              onClick={handleFilter}
+            >
               <Filter className="h-4 w-4 mr-2" />
               Filter
             </Button>
-            <Button variant="outline" size="sm" className="shadow-sm">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="shadow-sm"
+              onClick={() => handleExport('all', 'json')}
+            >
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
           </div>
         </div>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filter Options
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Time Range</label>
+                  <select 
+                    value={timeRange} 
+                    onChange={(e) => setTimeRange(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-md"
+                    aria-label="Select time range for analytics"
+                  >
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="90d">Last 90 days</option>
+                    <option value="1y">Last year</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Export Format</label>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleExport('all', 'json')}
+                    >
+                      JSON
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleExport('all', 'csv')}
+                    >
+                      CSV
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Export Type</label>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleExport('documents', 'json')}
+                    >
+                      Documents
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleExport('signatures', 'json')}
+                    >
+                      Signatures
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleExport('audit', 'json')}
+                    >
+                      Audit Trail
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleExport('deadlines', 'json')}
+                    >
+                      Deadlines
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

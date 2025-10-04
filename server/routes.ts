@@ -1445,6 +1445,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Analytics API endpoints
+  app.get("/api/analytics/signatures", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      // Get all documents for the user
+      const allComplianceDocuments = await storage.listDocuments();
+      const userComplianceDocuments = req.user.role === "employee"
+        ? allComplianceDocuments.filter(doc => doc.createdById === req.user.id)
+        : allComplianceDocuments;
+      
+      // Get all signatures for user's documents
+      const allSignatures = [];
+      for (const doc of userComplianceDocuments) {
+        const signatures = await storage.getDocumentSignatures(doc.id);
+        allSignatures.push(...signatures.map(sig => ({
+          ...sig,
+          documentTitle: doc.title,
+          documentId: doc.id
+        })));
+      }
+      
+      res.json(allSignatures);
+    } catch (error: any) {
+      console.error("Error retrieving signatures:", error);
+      res.status(500).json({ message: "Error retrieving signatures", error: error.message });
+    }
+  });
+
+  app.get("/api/analytics/audit-trail", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      // Get all documents for the user
+      const allComplianceDocuments = await storage.listDocuments();
+      const userComplianceDocuments = req.user.role === "employee"
+        ? allComplianceDocuments.filter(doc => doc.createdById === req.user.id)
+        : allComplianceDocuments;
+      
+      // Get all audit trails for user's documents
+      const allAuditTrails = [];
+      for (const doc of userComplianceDocuments) {
+        const auditTrail = await storage.getDocumentAuditTrail(doc.id);
+        allAuditTrails.push(...auditTrail.map(audit => ({
+          ...audit,
+          documentTitle: doc.title,
+          documentId: doc.id
+        })));
+      }
+      
+      // Sort by timestamp (most recent first)
+      allAuditTrails.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      res.json(allAuditTrails);
+    } catch (error: any) {
+      console.error("Error retrieving audit trail:", error);
+      res.status(500).json({ message: "Error retrieving audit trail", error: error.message });
+    }
+  });
+
+  app.get("/api/analytics/export", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { type = 'all', format = 'json' } = req.query;
+      
+      // Get all documents for the user
+      const allComplianceDocuments = await storage.listDocuments();
+      const userComplianceDocuments = req.user.role === "employee"
+        ? allComplianceDocuments.filter(doc => doc.createdById === req.user.id)
+        : allComplianceDocuments;
+      
+      // Get user documents
+      const userDocuments = await storage.getUserDocuments(req.user.id);
+      
+      // Get compliance deadlines
+      const deadlines = await storage.listComplianceDeadlines();
+      
+      // Get signatures
+      const allSignatures = [];
+      for (const doc of userComplianceDocuments) {
+        const signatures = await storage.getDocumentSignatures(doc.id);
+        allSignatures.push(...signatures.map(sig => ({
+          ...sig,
+          documentTitle: doc.title,
+          documentId: doc.id
+        })));
+      }
+      
+      // Get audit trails
+      const allAuditTrails = [];
+      for (const doc of userComplianceDocuments) {
+        const auditTrail = await storage.getDocumentAuditTrail(doc.id);
+        allAuditTrails.push(...auditTrail.map(audit => ({
+          ...audit,
+          documentTitle: doc.title,
+          documentId: doc.id
+        })));
+      }
+      
+      let exportData;
+      switch (type) {
+        case 'documents':
+          exportData = { documents: [...userComplianceDocuments, ...userDocuments] };
+          break;
+        case 'signatures':
+          exportData = { signatures: allSignatures };
+          break;
+        case 'audit':
+          exportData = { auditTrail: allAuditTrails };
+          break;
+        case 'deadlines':
+          exportData = { deadlines };
+          break;
+        default:
+          exportData = {
+            documents: [...userComplianceDocuments, ...userDocuments],
+            signatures: allSignatures,
+            auditTrail: allAuditTrails,
+            deadlines,
+            exportedAt: new Date().toISOString(),
+            exportedBy: req.user.email
+          };
+      }
+      
+      if (format === 'csv') {
+        // Convert to CSV format (simplified)
+        const csvData = JSON.stringify(exportData, null, 2);
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="analytics-export-${type}-${new Date().toISOString().split('T')[0]}.csv"`);
+        res.send(csvData);
+      } else {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="analytics-export-${type}-${new Date().toISOString().split('T')[0]}.json"`);
+        res.json(exportData);
+      }
+    } catch (error: any) {
+      console.error("Error exporting analytics data:", error);
+      res.status(500).json({ message: "Error exporting analytics data", error: error.message });
+    }
+  });
+
   // AI Chat API
   app.post("/api/ai/chat", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
