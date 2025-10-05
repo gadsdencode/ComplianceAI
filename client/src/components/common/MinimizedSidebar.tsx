@@ -39,10 +39,10 @@ const SidebarLink = ({
   badge,
   isCollapsed 
 }: SidebarLinkProps) => (
-  <li>
+  <li className="min-w-0">
     <Link href={href} onClick={onClick}>
       <div className={cn(
-        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative min-w-0",
         isActive 
           ? "bg-primary-100 text-primary-700 border border-primary-200" 
           : "text-slate-600 hover:text-slate-900 hover:bg-slate-100",
@@ -56,9 +56,9 @@ const SidebarLink = ({
         </span>
         {!isCollapsed && (
           <>
-            <span className="truncate">{label}</span>
+            <span className="truncate min-w-0 flex-1">{label}</span>
             {badge && badge > 0 && (
-              <Badge variant="secondary" className="ml-auto text-xs">
+              <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
                 {badge > 9 ? '9+' : badge}
               </Badge>
             )}
@@ -183,18 +183,18 @@ export default function MinimizedSidebar() {
 
       {/* Desktop Sidebar */}
       <aside className={cn(
-        "fixed left-0 top-0 z-30 h-full bg-white border-r border-slate-200 transition-all duration-300 ease-in-out",
+        "fixed left-0 top-0 z-30 h-full bg-white border-r border-slate-200 transition-all duration-300 ease-in-out overflow-x-hidden",
         isCollapsed ? "w-16" : "w-64",
         "hidden lg:flex flex-col"
       )}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 min-w-0">
           {!isCollapsed && (
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-sm">C</span>
               </div>
-              <span className="font-semibold text-slate-900">ComplianceAI</span>
+              <span className="font-semibold text-slate-900 truncate">ComplianceAI</span>
             </div>
           )}
           {isCollapsed && (
@@ -206,19 +206,19 @@ export default function MinimizedSidebar() {
             variant="ghost"
             size="sm"
             onClick={toggleCollapse}
-            className="h-8 w-8 p-0 hover:bg-slate-100"
+            className="h-8 w-8 p-0 hover:bg-slate-100 flex-shrink-0"
           >
             {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </Button>
         </div>
 
         {/* User Profile */}
-        <div className="p-4 border-b border-slate-200">
+        <div className="p-4 border-b border-slate-200 min-w-0">
           <div className={cn(
-            "flex items-center gap-3",
+            "flex items-center gap-3 min-w-0",
             isCollapsed && "justify-center"
           )}>
-            <Avatar className="h-8 w-8">
+            <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarImage src="" alt={user.name} />
               <AvatarFallback className="bg-gradient-to-br from-primary-500 to-primary-600 text-white text-sm font-semibold">
                 {getUserInitials()}
@@ -238,8 +238,8 @@ export default function MinimizedSidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <ul className="space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">
+          <ul className="space-y-1 min-w-0">
             {allLinks.map((link) => (
               <SidebarLink 
                 key={link.href}
@@ -255,7 +255,7 @@ export default function MinimizedSidebar() {
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-slate-200 min-w-0">
           <Button
             variant="ghost"
             size="sm"
@@ -278,31 +278,31 @@ export default function MinimizedSidebar() {
 
       {/* Mobile Sidebar */}
       <aside className={cn(
-        "fixed left-0 top-0 z-50 h-full w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:hidden",
+        "fixed left-0 top-0 z-50 h-full w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:hidden overflow-x-hidden",
         isMobileOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Mobile Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-sm">C</span>
             </div>
-            <span className="font-semibold text-slate-900">ComplianceAI</span>
+            <span className="font-semibold text-slate-900 truncate">ComplianceAI</span>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={toggleMobileSidebar}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 flex-shrink-0"
           >
             <X size={16} />
           </Button>
         </div>
 
         {/* Mobile User Profile */}
-        <div className="p-4 border-b border-slate-200">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10">
+        <div className="p-4 border-b border-slate-200 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar className="h-10 w-10 flex-shrink-0">
               <AvatarImage src="" alt={user.name} />
               <AvatarFallback className="bg-gradient-to-br from-primary-500 to-primary-600 text-white font-semibold">
                 {getUserInitials()}
@@ -320,8 +320,8 @@ export default function MinimizedSidebar() {
         </div>
 
         {/* Mobile Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <ul className="space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto overflow-x-hidden">
+          <ul className="space-y-1 min-w-0">
             {allLinks.map((link) => (
               <SidebarLink 
                 key={link.href}
@@ -338,7 +338,7 @@ export default function MinimizedSidebar() {
         </nav>
 
         {/* Mobile Logout */}
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-slate-200 min-w-0">
           <Button
             variant="ghost"
             size="sm"
