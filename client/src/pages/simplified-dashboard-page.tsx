@@ -1,10 +1,12 @@
-import DashboardLayout from '@/components/layouts/DashboardLayout';
+import SimplifiedLayout from '@/components/layouts/SimplifiedLayout';
 import SimplifiedDashboard from '@/components/dashboard/SimplifiedDashboard';
 
 export default function SimplifiedDashboardPage() {
   return (
-    <DashboardLayout pageTitle="Dashboard">
-      <SimplifiedDashboard />
-    </DashboardLayout>
+    <SimplifiedLayout>
+      <div className="p-6 pt-20">
+        <SimplifiedDashboard />
+      </div>
+    </SimplifiedLayout>
   );
 }

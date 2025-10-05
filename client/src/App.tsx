@@ -9,6 +9,7 @@ import AuthPage from "@/pages/auth-page";
 import ModernDashboardPage from "@/pages/modern-dashboard-page";
 import UltraModernDashboardPage from "@/pages/ultra-modern-dashboard-page";
 import MinimalDashboardPage from "@/pages/minimal-dashboard-page";
+import SimplifiedDashboardPage from "@/pages/simplified-dashboard-page";
 import ModernDocumentsPage from "@/pages/modern-documents-page";
 import SimplifiedAnalyticsPage from "@/pages/simplified-analytics-page";
 import SimplifiedCalendarPage from "@/pages/simplified-calendar-page";
@@ -21,7 +22,8 @@ import DocumentCreationPage from "@/pages/document-creation-page";
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={UltraModernDashboardPage} />
+      <ProtectedRoute path="/" component={SimplifiedDashboardPage} />
+      <ProtectedRoute path="/dashboard/ultra-modern" component={UltraModernDashboardPage} />
       <ProtectedRoute path="/dashboard/minimal" component={MinimalDashboardPage} />
       <ProtectedRoute path="/dashboard/modern" component={ModernDashboardPage} />
       <ProtectedRoute path="/documents" component={ModernDocumentsPage} />

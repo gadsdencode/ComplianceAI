@@ -149,7 +149,7 @@ const getQuickActions = (navigate: (path: string) => void): QuickAction[] => [
 ];
 
 export default function DocumentSearch({ 
-  placeholder = "Search actions, documents, deadlines, or type a command...",
+  placeholder = "Search documents, create new ones, or navigate anywhere...",
   className,
   onDocumentSelect,
   showResults = true,
