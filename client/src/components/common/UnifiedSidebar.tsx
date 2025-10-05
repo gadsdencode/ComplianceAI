@@ -192,7 +192,7 @@ export default function UnifiedSidebar() {
               <CheckSquare className="text-white" size={22} />
             </div>
             {!isCollapsed && (
-              <span className="ml-3 text-xl font-bold">ComplianceAI</span>
+              <span className="ml-3 text-xl font-bold">Compliance360</span>
             )}
           </div>
           <div className="flex items-center gap-2">

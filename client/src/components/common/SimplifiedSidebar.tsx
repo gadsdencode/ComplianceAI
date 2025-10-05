@@ -79,22 +79,26 @@ export default function SimplifiedSidebar() {
     { 
       href: "/", 
       icon: <LayoutDashboard size={20} />, 
-      label: "Dashboard"
+      label: "Dashboard",
+      badge: undefined
     },
     { 
       href: "/documents", 
       icon: <FileText size={20} />, 
-      label: "Documents"
+      label: "Documents",
+      badge: undefined
     },
     { 
       href: "/analytics", 
       icon: <BarChart3 size={20} />, 
-      label: "Analytics"
+      label: "Analytics",
+      badge: undefined
     },
     { 
       href: "/calendar", 
       icon: <Calendar size={20} />, 
-      label: "Calendar"
+      label: "Calendar",
+      badge: undefined
     },
   ];
 
@@ -103,14 +107,16 @@ export default function SimplifiedSidebar() {
     links.push({ 
       href: "/users", 
       icon: <Users size={20} />, 
-      label: "Users"
+      label: "Users",
+      badge: undefined
     });
   }
 
   links.push({ 
     href: "/settings", 
     icon: <Settings size={20} />, 
-    label: "Settings"
+    label: "Settings",
+    badge: undefined
   });
 
   return (
@@ -145,7 +151,7 @@ export default function SimplifiedSidebar() {
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg">
               <CheckSquare className="text-white" size={22} />
             </div>
-            <span className="ml-3 text-xl font-bold">ComplianceAI</span>
+            <span className="ml-3 text-xl font-bold">Compliance360</span>
           </div>
           <Button className="md:hidden text-white focus:outline-none hover:bg-slate-700 rounded-lg" onClick={toggleMobileSidebar} title="Close sidebar">
             <X size={20} />

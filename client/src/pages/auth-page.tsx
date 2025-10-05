@@ -36,7 +36,7 @@ export default function AuthPage() {
               <div className="h-10 w-10 rounded-md bg-primary-600 flex items-center justify-center mr-2">
                 <CheckCircle className="text-white" size={24} />
               </div>
-              <h1 className="text-2xl font-bold">ComplianceAI</h1>
+              <h1 className="text-2xl font-bold">Compliance360</h1>
             </div>
             <p className="text-slate-600 max-w-sm">
               Streamline your regulatory compliance with AI-powered document management

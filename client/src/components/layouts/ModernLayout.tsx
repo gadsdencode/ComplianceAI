@@ -53,6 +53,14 @@ type ModernLayoutProps = {
   actions?: ReactNode;
 };
 
+type NavigationLink = {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  badge?: number;
+  children?: Array<{ href: string; label: string; badge?: number }>;
+};
+
 type SidebarLinkProps = {
   href: string;
   icon: React.ReactNode;
@@ -185,7 +193,7 @@ export default function ModernLayout({
   };
 
   // Enhanced navigation structure with clear hierarchy and sub-navigation
-  const primaryLinks = [
+  const primaryLinks: NavigationLink[] = [
     { 
       href: "/", 
       icon: <LayoutDashboard size={20} />, 
@@ -220,7 +228,7 @@ export default function ModernLayout({
   ];
 
   // Secondary navigation (admin only)
-  const adminLinks = [
+  const adminLinks: NavigationLink[] = [
     { 
       href: "/users", 
       icon: <Users size={20} />, 
@@ -230,7 +238,7 @@ export default function ModernLayout({
   ];
 
   // Settings always at bottom
-  const settingsLinks = [
+  const settingsLinks: NavigationLink[] = [
     { 
       href: "/settings", 
       icon: <Settings size={20} />, 
@@ -272,7 +280,7 @@ export default function ModernLayout({
                 <CheckSquare className="text-white" size={22} />
               </div>
               {!isCollapsed && (
-                <span className="ml-3 text-xl font-bold">ComplianceAI</span>
+                <span className="ml-3 text-xl font-bold">Compliance360</span>
               )}
             </div>
             <div className="flex items-center gap-2">

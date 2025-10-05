@@ -115,7 +115,7 @@ export default function Sidebar() {
             <div className="h-8 w-8 rounded-md bg-primary-600 flex items-center justify-center">
               <CheckSquare className="text-white" size={20} />
             </div>
-            <span className="ml-2 text-xl font-semibold">ComplianceAI</span>
+            <span className="ml-2 text-xl font-semibold">Compliance360</span>
           </div>
           <Button className="md:hidden text-white focus:outline-none" onClick={toggleMobileSidebar} title="Close sidebar">
             <X size={20} />

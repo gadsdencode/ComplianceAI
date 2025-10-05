@@ -194,7 +194,7 @@ export default function MinimizedSidebar() {
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-sm">C</span>
               </div>
-              <span className="font-semibold text-slate-900 truncate">ComplianceAI</span>
+              <span className="font-semibold text-slate-900 truncate">Compliance360</span>
             </div>
           )}
           {isCollapsed && (
@@ -287,7 +287,7 @@ export default function MinimizedSidebar() {
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-sm">C</span>
             </div>
-            <span className="font-semibold text-slate-900 truncate">ComplianceAI</span>
+            <span className="font-semibold text-slate-900 truncate">Compliance360</span>
           </div>
           <Button
             variant="ghost"

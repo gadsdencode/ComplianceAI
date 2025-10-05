@@ -114,7 +114,7 @@ export default function EnhancedHeader({
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-slate-800">{pageTitle}</h1>
-                <p className="text-sm text-slate-500">ComplianceAI Platform</p>
+                <p className="text-sm text-slate-500">Compliance360 Platform</p>
               </div>
             </div>
           </div>

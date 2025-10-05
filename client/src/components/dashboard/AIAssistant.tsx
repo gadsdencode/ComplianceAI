@@ -47,7 +47,7 @@ export default function AIAssistant({
         {
           id: "welcome",
           role: "assistant",
-          content: "Hi! I'm your ComplianceAI Assistant. How can I help you with your compliance tasks today?",
+          content: "Hi! I'm your Compliance360 Assistant. How can I help you with your compliance tasks today?",
           timestamp: new Date().toISOString()
         }
       ]
@@ -144,7 +144,7 @@ export default function AIAssistant({
       <Card className="shadow overflow-hidden border border-slate-200">
         <CardHeader className="p-4 border-b border-slate-200 flex flex-row items-center">
           <Bot className="text-primary-600 mr-2" size={20} />
-          <CardTitle className="text-base font-medium">ComplianceAI Assistant</CardTitle>
+          <CardTitle className="text-base font-medium">Compliance360 Assistant</CardTitle>
         </CardHeader>
         <CardContent className="p-4">
           <div className="space-y-4 mb-4 max-h-[350px] overflow-y-auto custom-scrollbar">
