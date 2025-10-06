@@ -17,6 +17,7 @@ import UsersPage from "@/pages/users-page";
 import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
 import DocumentCreationPage from "@/pages/document-creation-page";
+import EnhancedSearchbarDemo from "@/pages/enhanced-searchbar-demo";
 
 
 function Router() {
@@ -33,6 +34,7 @@ function Router() {
       <ProtectedRoute path="/calendar" component={SimplifiedCalendarPage} />
       <ProtectedRoute path="/users" component={UsersPage} allowedRoles={["admin", "compliance_officer"]} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
+      <ProtectedRoute path="/searchbar-demo" component={EnhancedSearchbarDemo} />
       <Route path="/auth" component={AuthPage} />
       
       <Route component={NotFound} />

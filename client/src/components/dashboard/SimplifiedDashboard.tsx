@@ -13,7 +13,7 @@ import {
   Target,
   Activity
 } from 'lucide-react';
-import DocumentSearch from '../common/DocumentSearch';
+import EnhancedDocumentSearch from '../common/EnhancedDocumentSearch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -145,10 +145,11 @@ export default function SimplifiedDashboard() {
           
           {/* Primary Search Bar */}
           <div className="max-w-2xl">
-            <DocumentSearch 
+            <EnhancedDocumentSearch 
               placeholder="Search documents, create new ones, or navigate anywhere..."
               className="bg-white/90 backdrop-blur-sm border-white/20 shadow-lg"
               maxResults={8}
+              showQuickActions={true}
             />
           </div>
         </div>
