@@ -247,14 +247,14 @@ export default function SearchCommandCenter({
         className={cn(
           "relative bg-white/95 backdrop-blur-sm border-2 rounded-2xl shadow-lg",
           "transition-all duration-300 ease-out",
-          "min-h-[80px] p-6"
+          "min-h-[72px] sm:min-h-[80px] p-4 sm:p-6"
         )}
         variants={searchContainerVariants}
         animate={getAnimationState()}
         initial="idle"
       >
         {/* Search Input */}
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:space-x-4 space-y-3 sm:space-y-0">
           <div className="relative flex-1">
             <motion.div
               className="relative"
@@ -282,7 +282,7 @@ export default function SearchCommandCenter({
                   setTimeout(() => setIsFocused(false), 150);
                 }}
                 className={cn(
-                  "pl-12 pr-12 py-4 text-lg border-0 bg-transparent",
+                  "pl-10 pr-10 sm:pl-12 sm:pr-12 py-3 sm:py-4 text-base sm:text-lg border-0 bg-transparent",
                   "focus:ring-0 focus:outline-none",
                   "placeholder:text-slate-400"
                 )}
@@ -320,7 +320,7 @@ export default function SearchCommandCenter({
           </div>
           
           {/* Search Scope Selector */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center flex-wrap gap-2 sm:gap-2">
             {searchScopes.map((scope) => {
               const Icon = scope.icon;
               const isActive = searchScope === scope.id;
@@ -330,7 +330,7 @@ export default function SearchCommandCenter({
                   key={scope.id}
                   onClick={() => handleScopeChange(scope.id)}
                   className={cn(
-                    "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    "flex items-center space-x-2 px-2 py-1 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200",
                     "hover:scale-105 active:scale-95",
                     isActive 
                       ? `${scope.color} shadow-sm` 
