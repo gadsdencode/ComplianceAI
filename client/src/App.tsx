@@ -18,12 +18,17 @@ import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
 import DocumentCreationPage from "@/pages/document-creation-page";
 import EnhancedSearchbarDemo from "@/pages/enhanced-searchbar-demo";
+import SearchCentricDashboardPage from "@/pages/search-centric-dashboard-page";
+import EnhancedSearchDashboardPage from "@/pages/enhanced-search-dashboard-page";
+import DashboardPage from "@/pages/dashboard-page";
 
 
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={SimplifiedDashboardPage} />
+      <ProtectedRoute path="/" component={DashboardPage} />
+      <ProtectedRoute path="/dashboard/search-centric" component={SearchCentricDashboardPage} />
+      <ProtectedRoute path="/dashboard/enhanced-search" component={EnhancedSearchDashboardPage} />
       <ProtectedRoute path="/dashboard/ultra-modern" component={UltraModernDashboardPage} />
       <ProtectedRoute path="/dashboard/minimal" component={MinimalDashboardPage} />
       <ProtectedRoute path="/dashboard/modern" component={ModernDashboardPage} />

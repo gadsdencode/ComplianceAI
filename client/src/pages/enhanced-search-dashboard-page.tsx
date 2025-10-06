@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -13,22 +13,31 @@ import AIAssistant from '@/components/dashboard/AIAssistant';
 import CreateDocumentModal from '@/components/documents/CreateDocumentModal';
 import EditDeadlineModal from '@/components/compliance/EditDeadlineModal';
 import AddDeadlineModal from '@/components/compliance/AddDeadlineModal';
-import { DashboardStats, PendingDocumentItem, RecentDocumentItem, ComplianceCalendarItem, Template, ComplianceDeadline, User } from '@/types';
-import { Plus, AlertCircle, Search, Filter, Sparkles } from 'lucide-react';
+import { 
+  DashboardStats, 
+  PendingDocumentItem, 
+  RecentDocumentItem, 
+  ComplianceCalendarItem, 
+  Template, 
+  ComplianceDeadline, 
+  User 
+} from '@/types';
+import { Plus, AlertCircle, Search, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-// Dashboard content component that uses search context
-function DashboardContent() {
+// Search-driven dashboard content component
+function EnhancedDashboardContent() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditDeadlineModalOpen, setIsEditDeadlineModalOpen] = useState(false);
   const [isAddDeadlineModalOpen, setIsAddDeadlineModalOpen] = useState(false);
   const [selectedDeadlineId, setSelectedDeadlineId] = useState<number | null>(null);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Get search context
   const { query, isActive, hasResults, searchResults } = useSearchContext();
@@ -57,41 +66,73 @@ function DashboardContent() {
     },
   });
 
-  // Fetch compliance documents that need action
+  // Fetch compliance documents that need action (filtered by search)
   const {
     data: pendingComplianceDocuments,
     isLoading: isLoadingPendingCompliance
   } = useQuery<PendingDocumentItem[]>({
-    queryKey: ['/api/documents', { status: 'pending_approval' }],
-    select: (data) => data.map(doc => ({
-      id: doc.id,
-      title: doc.title,
-      deadline: doc.deadline || undefined,
-      status: doc.status,
-      actionType: doc.status === 'pending_approval' ? 'approve' : 
-                 doc.status === 'active' ? 'review' : 'sign'
-    })),
+    queryKey: ['/api/documents', { status: 'pending_approval', search: query }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ status: 'pending_approval' });
+      if (query && query.length >= 2) {
+        params.set('search', query);
+      }
+      
+      const response = await fetch(`/api/documents?${params.toString()}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch pending documents');
+      }
+      
+      const data = await response.json();
+      return data.map((doc: any) => ({
+        id: doc.id,
+        title: doc.title,
+        deadline: doc.deadline || undefined,
+        status: doc.status,
+        actionType: doc.status === 'pending_approval' ? 'approve' : 
+                   doc.status === 'active' ? 'review' : 'sign'
+      }));
+    },
   });
 
-  // Fetch user documents that need action (drafts)
+  // Fetch user documents that need action (drafts) - filtered by search
   const {
     data: pendingUserDocuments,
     isLoading: isLoadingPendingUser
   } = useQuery<any[]>({
-    queryKey: ['/api/user-documents'],
-    staleTime: 0, // Always consider data stale
-    refetchOnMount: true, // Always refetch when component mounts
-    select: (data) => data
-      .filter(doc => doc.status === 'draft')
-      .slice(0, 5)
-      .map(doc => ({
-        id: doc.id,
-        title: doc.title,
-        deadline: undefined,
-        status: doc.status,
-        actionType: 'complete',
-        isUserDocument: true
-      })),
+    queryKey: ['/api/user-documents', { status: 'draft', search: query }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (query && query.length >= 2) {
+        params.set('search', query);
+      }
+      
+      const response = await fetch(`/api/user-documents?${params.toString()}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch user documents');
+      }
+      
+      const data = await response.json();
+      return data
+        .filter((doc: any) => doc.status === 'draft')
+        .slice(0, 5)
+        .map((doc: any) => ({
+          id: doc.id,
+          title: doc.title,
+          deadline: undefined,
+          status: doc.status,
+          actionType: 'complete',
+          isUserDocument: true
+        }));
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Combine pending documents
@@ -102,35 +143,67 @@ function DashboardContent() {
 
   const isLoadingPending = isLoadingPendingCompliance || isLoadingPendingUser;
 
-  // Fetch recent compliance documents
+  // Fetch recent compliance documents (filtered by search)
   const {
     data: recentComplianceDocuments,
     isLoading: isLoadingRecentCompliance
   } = useQuery<RecentDocumentItem[]>({
-    queryKey: ['/api/documents'],
-    select: (data) => data.slice(0, 3).map(doc => ({
-      id: doc.id,
-      title: doc.title,
-      updatedAt: doc.updatedAt,
-      status: doc.status
-    })),
+    queryKey: ['/api/documents', { recent: true, search: query }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (query && query.length >= 2) {
+        params.set('search', query);
+      }
+      
+      const response = await fetch(`/api/documents?${params.toString()}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch recent documents');
+      }
+      
+      const data = await response.json();
+      return data.slice(0, 3).map((doc: any) => ({
+        id: doc.id,
+        title: doc.title,
+        updatedAt: doc.updatedAt,
+        status: doc.status
+      }));
+    },
   });
 
-  // Fetch recent user documents
+  // Fetch recent user documents (filtered by search)
   const {
     data: recentUserDocuments,
     isLoading: isLoadingRecentUser
   } = useQuery<any[]>({
-    queryKey: ['/api/user-documents'],
-    staleTime: 0, // Always consider data stale
-    refetchOnMount: true, // Always refetch when component mounts
-    select: (data) => data.slice(0, 2).map(doc => ({
-      id: doc.id,
-      title: doc.title,
-      updatedAt: doc.updatedAt,
-      status: doc.status,
-      isUserDocument: true
-    })),
+    queryKey: ['/api/user-documents', { recent: true, search: query }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (query && query.length >= 2) {
+        params.set('search', query);
+      }
+      
+      const response = await fetch(`/api/user-documents?${params.toString()}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch recent user documents');
+      }
+      
+      const data = await response.json();
+      return data.slice(0, 2).map((doc: any) => ({
+        id: doc.id,
+        title: doc.title,
+        updatedAt: doc.updatedAt,
+        status: doc.status,
+        isUserDocument: true
+      }));
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Combine recent documents
@@ -141,37 +214,46 @@ function DashboardContent() {
 
   const isLoadingRecent = isLoadingRecentCompliance || isLoadingRecentUser;
 
-
-
-  // Fetch compliance deadlines
+  // Fetch compliance deadlines (filtered by search)
   const {
     data: complianceDeadlines,
     isLoading: isLoadingDeadlines
   } = useQuery<ComplianceCalendarItem[]>({
-    queryKey: ['/api/compliance-deadlines', { upcoming: true }],
-    select: (data: any[]) => data.map(deadline => {
-      // Find the assignee user if available
-      const assigneeUser = users?.find(user => user.id === deadline.assigneeId);
+    queryKey: ['/api/compliance-deadlines', { upcoming: true, search: query }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ upcoming: 'true' });
+      if (query && query.length >= 2) {
+        params.set('search', query);
+      }
       
-      return {
+      const response = await fetch(`/api/compliance-deadlines?${params.toString()}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch compliance deadlines');
+      }
+      
+      const data = await response.json();
+      return data.map((deadline: any) => ({
         id: deadline.id,
         title: deadline.title,
         deadline: deadline.deadline,
         type: deadline.type,
         assignee: {
-          id: assigneeUser?.id || 0,
-          name: assigneeUser?.name || 'Unassigned',
-          initials: assigneeUser?.name?.slice(0, 2)?.toUpperCase() || 'UN'
+          id: 0, // Will be populated with user data
+          name: 'Unassigned',
+          initials: 'UN'
         },
         status: deadline.status
-      };
-    }),
+      }));
+    },
   });
 
   // Fetch users for assignee information
   const { data: users } = useQuery<User[]>({
     queryKey: ['/api/users'],
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch templates for create document modal
@@ -180,7 +262,7 @@ function DashboardContent() {
     isLoading: isLoadingTemplates
   } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
-    enabled: isCreateModalOpen, // Only fetch when modal is open
+    enabled: isCreateModalOpen,
   });
 
   // Fetch deadline details when editing
@@ -192,12 +274,13 @@ function DashboardContent() {
     enabled: isEditDeadlineModalOpen && selectedDeadlineId !== null,
   });
 
-  // Create a validated deadline object to ensure ID is properly set
+  // Create a validated deadline object
   const validatedSelectedDeadline = selectedDeadline && selectedDeadlineId ? {
     ...selectedDeadline,
     id: selectedDeadlineId
   } : null;
 
+  // Event handlers
   const handleCreateDocument = () => {
     setIsCreateModalOpen(true);
   };
@@ -449,14 +532,14 @@ function DashboardContent() {
 }
 
 // Main dashboard page component
-export default function DashboardPage() {
+export default function EnhancedSearchDashboardPage() {
   return (
     <SearchResultsProvider>
       <DashboardLayout 
-        pageTitle="Dashboard" 
+        pageTitle="Enhanced Dashboard" 
         notificationCount={0}
       >
-        <DashboardContent />
+        <EnhancedDashboardContent />
       </DashboardLayout>
     </SearchResultsProvider>
   );

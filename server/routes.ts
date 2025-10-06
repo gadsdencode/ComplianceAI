@@ -345,6 +345,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error searching documents", error: error.message });
     }
   });
+
+  // Search suggestions endpoint
+  app.get("/api/search/suggestions", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const { q: query } = req.query;
+      
+      if (!query || typeof query !== 'string' || query.trim().length < 2) {
+        return res.json([]);
+      }
+      
+      const searchQuery = query.trim().toLowerCase();
+      
+      // Get recent searches from user's search history (stored in session or database)
+      const recentSearches = [
+        "compliance documents",
+        "pending approvals",
+        "deadline reminders",
+        "user documents",
+        "analytics dashboard"
+      ].filter(term => term.toLowerCase().includes(searchQuery))
+       .map(term => ({
+         id: `recent-${term}`,
+         text: term,
+         type: 'recent',
+         category: 'Recent Searches'
+       }));
+      
+      // Get popular search terms
+      const popularSearches = [
+        "ISO 27001",
+        "GDPR compliance",
+        "security policy",
+        "audit checklist",
+        "risk assessment"
+      ].filter(term => term.toLowerCase().includes(searchQuery))
+       .map(term => ({
+         id: `popular-${term}`,
+         text: term,
+         type: 'popular',
+         category: 'Popular Searches'
+       }));
+      
+      // Get autocomplete suggestions based on document titles
+      const documents = await storage.searchDocuments({
+        searchQuery: searchQuery,
+        limit: 5
+      });
+      
+      const autocompleteSuggestions = documents.map(doc => ({
+        id: `autocomplete-${doc.id}`,
+        text: doc.title,
+        type: 'autocomplete',
+        category: 'Documents'
+      }));
+      
+      // Combine and limit suggestions
+      const suggestions = [
+        ...recentSearches.slice(0, 3),
+        ...popularSearches.slice(0, 3),
+        ...autocompleteSuggestions.slice(0, 4)
+      ].slice(0, 10);
+      
+      res.json(suggestions);
+    } catch (error: any) {
+      console.error('❌ Search suggestions error:', error);
+      res.status(500).json({ message: "Error fetching search suggestions", error: error.message });
+    }
+  });
   
   app.get("/api/documents/:id", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {

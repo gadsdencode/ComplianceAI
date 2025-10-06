@@ -55,13 +55,17 @@ export default function AIAssistant({
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    }
   };
 
   const handleSendMessage = async () => {
@@ -147,7 +151,7 @@ export default function AIAssistant({
           <CardTitle className="text-base font-medium">Compliance360 Assistant</CardTitle>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="space-y-4 mb-4 max-h-[350px] overflow-y-auto custom-scrollbar">
+          <div ref={messagesContainerRef} className="space-y-4 mb-4 max-h-[350px] overflow-y-auto custom-scrollbar">
             {messages.map((message) => (
               <div key={message.id} className={cn(
                 "flex items-start",
