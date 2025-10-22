@@ -1,6 +1,6 @@
-import { IObjectStorageClient } from './object-storage-client';
-import { ReplitStorageClient } from './replit-storage-client';
-import { MockStorageClient } from './mock-storage-client';
+import { IObjectStorageClient } from './object-storage-client.js';
+import { ReplitStorageClient } from './replit-storage-client.js';
+import { MockStorageClient } from './mock-storage-client.js';
 
 /**
  * Environment detection for Replit
@@ -85,6 +85,6 @@ export function resetObjectStorageClient(): void {
 }
 
 // Re-export types and utilities for convenience
-export * from './object-storage-client';
-export { ReplitStorageClient } from './replit-storage-client';
-export { MockStorageClient } from './mock-storage-client';
+export * from './object-storage-client.js';
+export { ReplitStorageClient } from './replit-storage-client.js';
+export { MockStorageClient } from './mock-storage-client.js';

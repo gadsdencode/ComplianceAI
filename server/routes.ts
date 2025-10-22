@@ -45,7 +45,7 @@ if (envBucketId && !isValidBucketId) {
 // Get the object storage client instance
 const objectClient: IObjectStorageClient = getObjectStorageClient({
   bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID,
-  forceReplit: isReplitEnvironment && isValidBucketId // Only force Replit if we have a valid bucket
+  forceMode: (isReplitEnvironment && isValidBucketId) ? 'replit' : undefined // Only force Replit if we have a valid bucket
 });
 
 const upload = multer();

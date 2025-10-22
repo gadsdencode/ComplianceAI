@@ -5,7 +5,7 @@ import {
   StorageObject,
   UploadOptions,
   DownloadOptions
-} from './object-storage-client';
+} from './object-storage-client.js';
 
 /**
  * Mock storage client for development/testing that mirrors the real API

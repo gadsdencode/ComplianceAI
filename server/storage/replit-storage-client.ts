@@ -9,7 +9,7 @@ import {
   DEFAULT_RETRY_CONFIG,
   RetryConfig,
   withRetry
-} from './object-storage-client';
+} from './object-storage-client.js';
 
 /**
  * Replit Object Storage implementation with robust error handling and retries
