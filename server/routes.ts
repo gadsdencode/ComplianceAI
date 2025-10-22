@@ -2543,28 +2543,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error('No file data available - neither tempFilePath nor data property found');
         }
 
-        // Upload file to Object Storage
+        // Upload file to Object Storage with retry logic
         console.log(`🚀 Uploading to object storage:`, {
           objectName,
           fileSize: fileData.length,
-          bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID,
-          isReplitEnv: isReplitEnvironment
+          fileType: uploadedFile.mimetype
         });
         
         const uploadResult = await objectStorage.uploadFromBytes(
           objectName, 
-          fileData
+          fileData,
+          {
+            contentType: uploadedFile.mimetype,
+            metadata: {
+              userId: String(req.user.id),
+              originalName: uploadedFile.name,
+              category: category,
+              uploadedAt: new Date().toISOString()
+            }
+          }
         );
         
         console.log(`📤 Upload result:`, uploadResult);
         
         if (!uploadResult.ok) {
           console.error("❌ Error uploading to storage:", uploadResult.error);
-          console.error("❌ Error details:", JSON.stringify(uploadResult, null, 2));
+          
+          // Provide more specific error messages based on the error type
+          let errorMessage = "Error uploading file to storage";
+          const errorStr = typeof uploadResult.error === 'string' ? uploadResult.error : 
+                          uploadResult.error instanceof Error ? uploadResult.error.message : 
+                          String(uploadResult.error);
+          
+          if (errorStr) {
+            if (errorStr.includes('network') || errorStr.includes('timeout')) {
+              errorMessage = "Network error during upload. Please try again.";
+            } else if (errorStr.includes('size') || errorStr.includes('limit')) {
+              errorMessage = "File size exceeds the allowed limit.";
+            } else if (errorStr.includes('permission') || errorStr.includes('auth')) {
+              errorMessage = "Storage permission error. Please contact support.";
+            }
+          }
+          
           return res.status(500).json({ 
-            message: "Error uploading file to storage", 
-            error: uploadResult.error,
-            details: uploadResult
+            message: errorMessage, 
+            error: errorStr,
+            retryable: errorStr.includes('network') || errorStr.includes('timeout')
           });
         }
         
