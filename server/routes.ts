@@ -28,11 +28,24 @@ const openai = new OpenAI({
 });
 
 // Object storage configuration
-const REPLIT_OBJECT_STORAGE_BUCKET_ID = process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID || 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826';
+// Check if we have a valid Replit bucket ID (should start with 'replit-objstore-')
+const envBucketId = process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID;
+const isValidBucketId = envBucketId && envBucketId.startsWith('replit-objstore-');
+
+// Use the default bucket ID if the environment variable is invalid
+const REPLIT_OBJECT_STORAGE_BUCKET_ID = isValidBucketId 
+  ? envBucketId 
+  : 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826';
+
+if (envBucketId && !isValidBucketId) {
+  console.warn(`⚠️ Invalid bucket ID in REPLIT_OBJECT_STORAGE_BUCKET_ID: "${envBucketId}"`);
+  console.warn(`⚠️ Using default bucket ID: ${REPLIT_OBJECT_STORAGE_BUCKET_ID}`);
+}
 
 // Get the object storage client instance
 const objectClient: IObjectStorageClient = getObjectStorageClient({
-  bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
+  bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID,
+  forceReplit: isReplitEnvironment && isValidBucketId // Only force Replit if we have a valid bucket
 });
 
 const upload = multer();
