@@ -10,7 +10,7 @@ import {
 } from "../shared/schema.js";
 import { aiService } from "./ai-service.js";
 import OpenAI from "openai";
-import { getObjectStorageClient, type IObjectStorageClient } from "./storage/index.js";
+import { getObjectStorageClient, type IObjectStorageClient, isReplitEnvironment } from "./storage/index.js";
 import dotenv from "dotenv";
 // @ts-ignore: multer has no types in tsconfig
 import multer from 'multer';
@@ -27,9 +27,12 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Object storage configuration
+const REPLIT_OBJECT_STORAGE_BUCKET_ID = process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID || 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826';
+
 // Get the object storage client instance
 const objectClient: IObjectStorageClient = getObjectStorageClient({
-  bucketId: process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID || 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+  bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
 });
 
 const upload = multer();
@@ -2181,24 +2184,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Delete files from object storage for real documents
       if (realDocuments.length > 0) {
-        let objectStorage: any;
-        
-        if (isReplitEnvironment) {
-          objectStorage = new Client({
-            bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-          });
-        } else {
-          objectStorage = objectClient;
-        }
-        
         // Delete files from object storage (best effort)
         for (const doc of realDocuments) {
           if (doc.file_url) {
-            try {
-              await objectStorage.delete(doc.file_url);
+            const deleteResult = await objectClient.delete(doc.file_url);
+            if (deleteResult.ok) {
               console.log(`🗑️ Deleted file from storage: ${doc.file_url}`);
-            } catch (storageError) {
-              console.error(`⚠️ Failed to delete file from storage: ${doc.file_url}`, storageError);
+            } else {
+              console.error(`⚠️ Failed to delete file from storage: ${doc.file_url}`, deleteResult.error);
               // Continue with database deletion even if storage deletion fails
             }
           }
@@ -2311,12 +2304,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Storage service not available" });
       }
       
-      const storageClient = objectClient;
-      
-      // Determine the object key to stream, with a resilient fallback if the recorded key is wrong
+      // Determine the object key to stream
       let streamKey = document.fileUrl;
       console.log(`🔍 Checking if file exists in object storage: ${streamKey}`);
-      const existsResult = await storageClient.exists(streamKey);
+      const existsResult = await objectClient.exists(streamKey);
       console.log(`🔍 Object storage exists check result:`, existsResult);
       
       if (!existsResult.ok) {
@@ -2358,7 +2349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const candidates: { name: string; size?: number }[] = [];
           for (const prefix of knownPrefixes) {
             try {
-              const items = await listAllObjectNames(storageClient, prefix);
+              const items = await listAllObjectNames(objectClient, prefix);
               candidates.push(...items);
             } catch (e) {
               console.warn(`Prefix scan failed for '${prefix}':`, (e as any)?.message || e);
@@ -2396,78 +2387,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
         res.setHeader('Cache-Control', 'no-cache');
         
-        // Try streaming first, with proper error handling
-        let streamed = false;
-        try {
-          if (typeof (storageClient as any).downloadAsStream === 'function') {
-            const maybeStream: any = await (storageClient as any).downloadAsStream(streamKey);
-            if (maybeStream && typeof maybeStream.pipe === 'function') {
-              console.log(`📡 Starting Node stream for: ${streamKey}`);
-              streamed = true;
-              
-              // Set up proper error handling
-              maybeStream.on('error', (err: any) => {
-                console.error(`❌ Node stream error for ${document.fileName}:`, err);
-                if (!res.headersSent) {
-                  res.status(500).json({ message: "Stream error", error: err.message });
-                }
-              });
-              
-              // Handle stream end
-              maybeStream.on('end', () => {
-                console.log(`✅ Stream completed for: ${document.fileName}`);
-              });
-              
-              // Pipe the stream to response
-              maybeStream.pipe(res);
-            } else if (maybeStream && typeof maybeStream.getReader === 'function') {
-              console.log(`📡 Starting Web stream for: ${streamKey}`);
-              const { Readable } = await import('stream');
-              const nodeStream = (Readable as any).fromWeb ? (Readable as any).fromWeb(maybeStream) : null;
-              if (nodeStream) {
-                streamed = true;
-                nodeStream.on('error', (err: any) => {
-                  console.error(`❌ Web->Node stream error for ${document.fileName}:`, err);
-                  if (!res.headersSent) {
-                    res.status(500).json({ message: "Stream conversion error", error: err.message });
-                  }
-                });
-                nodeStream.pipe(res);
-              }
+        // Try streaming the file
+        const streamResult = await objectClient.downloadAsStream(streamKey);
+        
+        if (streamResult.ok && streamResult.value) {
+          console.log(`📡 Starting stream for: ${document.fileName}`);
+          const stream = streamResult.value;
+          
+          // Set up proper error handling
+          stream.on('error', (err: any) => {
+            console.error(`❌ Stream error for ${document.fileName}:`, err);
+            if (!res.headersSent) {
+              res.status(500).json({ message: "Stream error", error: err.message });
             }
+          });
+          
+          // Handle stream end
+          stream.on('end', () => {
+            console.log(`✅ Stream completed for: ${document.fileName}`);
+          });
+          
+          // Pipe the stream to response
+          stream.pipe(res);
+        } else {
+          // Fall back to buffer download if streaming failed
+          console.log(`⬇️ Falling back to buffer download for: ${streamKey}`);
+          const bufferResult = await objectClient.downloadAsBuffer(streamKey);
+          
+          if (!bufferResult.ok || !bufferResult.value) {
+            console.error(`❌ Buffer download failed: ${bufferResult.error}`);
+            return res.status(500).json({ message: "Download failed", error: bufferResult.error });
           }
-        } catch (streamErr) {
-          console.warn(`⚠️ Streaming attempt failed, will try bytes fallback:`, (streamErr as any)?.message || streamErr);
-        }
-
-        // Fallback to bytes download if streaming failed
-        if (!streamed) {
-          if (typeof (storageClient as any).downloadAsBytes === 'function') {
-            console.log(`⬇️ Falling back to bytes download for: ${streamKey}`);
-            try {
-              const bytesRes: any = await (storageClient as any).downloadAsBytes(streamKey);
-              
-              if (!bytesRes.ok) {
-                console.error(`❌ Bytes download failed: ${bytesRes.error}`);
-                return res.status(500).json({ message: "Download failed", error: bytesRes.error });
-              }
-              
-              const bytes: Uint8Array = bytesRes.value;
-              const buf = Buffer.from(bytes);
-              
-              // Set content length for proper download
-              res.setHeader('Content-Length', String(buf.length));
-              console.log(`✅ Sending ${buf.length} bytes for: ${document.fileName}`);
-              
-              return res.end(buf);
-            } catch (bytesErr) {
-              console.error(`❌ Bytes download error:`, bytesErr);
-              return res.status(500).json({ message: "Download error", error: bytesErr instanceof Error ? bytesErr.message : String(bytesErr) });
-            }
-          } else {
-            console.error(`❌ Storage client does not support downloadAsBytes and streaming was unavailable.`);
-            return res.status(500).json({ message: "Storage client cannot download file" });
-          }
+          
+          const buffer = bufferResult.value;
+          
+          // Set content length for proper download
+          res.setHeader('Content-Length', String(buffer.length));
+          console.log(`✅ Sending ${buffer.length} bytes for: ${document.fileName}`);
+          
+          return res.end(buffer);
         }
         
       } catch (setupError) {
