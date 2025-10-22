@@ -73,16 +73,32 @@ export const complianceDeadlines = pgTable("compliance_deadlines", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Templates schema
+// Templates schema - Enhanced with professional features
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
   content: text("content").notNull(),
   category: varchar("category", { length: 100 }),
+  tags: text("tags").array(),
+  variables: jsonb("variables").$type<Array<{
+    name: string;
+    type?: string;
+    required?: boolean;
+    defaultValue?: string;
+    description?: string;
+    placeholder?: string;
+    validation?: string;
+    options?: string[];
+  }>>().default([]),
+  estimatedTime: varchar("estimated_time", { length: 50 }),
+  complianceStandards: text("compliance_standards").array(),
+  version: integer("version").notNull().default(1),
   createdById: integer("created_by_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   isDefault: boolean("is_default").default(false),
+  isActive: boolean("is_active").default(true),
 });
 
 // User documents table

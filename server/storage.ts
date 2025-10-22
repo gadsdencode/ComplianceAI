@@ -128,11 +128,12 @@ export class DatabaseStorage implements IStorage {
   
   private async initDefaultTemplates() {
     try {
+      // Import and seed professional templates
+      const { seedProfessionalTemplates } = await import("./templates/seed-templates.js");
+      
       // Check if there are any templates
       const existingTemplates = await db.select({ count: sql`count(*)` }).from(templates);
-      if (parseInt(existingTemplates[0].count as string) > 0) {
-        return; // Already have templates
-      }
+      const templateCount = parseInt(existingTemplates[0].count as string);
       
       // Create admin user if it doesn't exist
       let adminId = 1;
@@ -148,38 +149,13 @@ export class DatabaseStorage implements IStorage {
         adminId = admin.id;
       }
       
-      // Add default templates
-      await this.createTemplate({
-        name: "GDPR Compliance",
-        content: "# GDPR Compliance Statement\n\nThis document outlines how [Company Name] complies with GDPR regulations...",
-        category: "Privacy",
-        createdById: adminId,
-        isDefault: true
-      });
-
-      await this.createTemplate({
-        name: "ISO 27001",
-        content: "# ISO 27001 Information Security Policy\n\n[Company Name] is committed to information security...",
-        category: "Security",
-        createdById: adminId,
-        isDefault: true
-      });
-
-      await this.createTemplate({
-        name: "PCI DSS",
-        content: "# PCI DSS Compliance Statement\n\n[Company Name] adheres to the Payment Card Industry Data Security Standard...",
-        category: "Financial",
-        createdById: adminId,
-        isDefault: true
-      });
-
-      await this.createTemplate({
-        name: "SOC 2",
-        content: "# SOC 2 Compliance Statement\n\n[Company Name] follows the Trust Services Criteria...",
-        category: "Security",
-        createdById: adminId,
-        isDefault: true
-      });
+      // Seed comprehensive professional templates if we have less than 5
+      if (templateCount < 5) {
+        console.log("📚 Initializing comprehensive professional templates...");
+        await seedProfessionalTemplates(adminId);
+      } else {
+        console.log(`✅ Templates already initialized (${templateCount} templates found)`);
+      }
     } catch (error) {
       console.error("Error initializing default templates:", error);
       // Don't re-throw to prevent app startup failure

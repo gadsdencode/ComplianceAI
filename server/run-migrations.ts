@@ -4,6 +4,8 @@ import { runMigration as addUserDocumentsFields } from "./migrations/add-user-do
 import { up as addCategoryToDocuments } from "./migrations/add-category-to-documents.js";
 import { runMigration as addSessionTable } from "./migrations/add-session-table.js";
 import { runMigration as fixUserDocumentsFileUrl } from "./migrations/fix-user-documents-fileurl.js";
+import { runMigration as addTemplateEnhancements } from "./migrations/add-template-enhancements.js";
+import { runMigration as updateTemplateVariablesToJsonb } from "./migrations/update-template-variables-to-jsonb.js";
 
 async function runAllMigrations() {
   console.log("🚀 Starting database migrations...");
@@ -27,6 +29,12 @@ async function runAllMigrations() {
     
     console.log("🔗 Running fileUrl fix migration...");
     await fixUserDocumentsFileUrl();
+    
+    console.log("📚 Running template enhancements migration...");
+    await addTemplateEnhancements();
+    
+    console.log("🔧 Running template variables JSONB migration...");
+    await updateTemplateVariablesToJsonb();
     
     console.log("✅ All migrations completed successfully");
   } catch (error) {
