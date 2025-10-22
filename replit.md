@@ -49,10 +49,17 @@ Preferred communication style: Simple, everyday language.
 - **Assistant**: Interactive chat interface for compliance queries
 
 ### File Management
-- **Storage**: Replit Object Storage for production, local mock for development
+- **Storage Architecture**: Abstracted storage layer with interface-based design
+  - IObjectStorageClient interface for consistent API across implementations
+  - ReplitStorageClient: Production implementation with automatic retry logic
+  - MockStorageClient: Development implementation that mirrors production API
+- **Error Handling**: 
+  - Automatic retry with exponential backoff (300ms base, max 3 retries)
+  - Proper differentiation between storage errors (503) and missing files (404)
+  - Network/transient failures are automatically retried
 - **Upload**: Multi-file upload with validation and metadata
 - **Security**: File type validation and size limits
-- **Organization**: Folder-based file organization
+- **Organization**: Pattern-based storage: `{category}/{userId}/{filename}`
 
 ## Data Flow
 
