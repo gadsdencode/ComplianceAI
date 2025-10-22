@@ -10,7 +10,7 @@ import {
 } from "../shared/schema.js";
 import { aiService } from "./ai-service.js";
 import OpenAI from "openai";
-import { Client } from "@replit/object-storage";
+import { getObjectStorageClient, type IObjectStorageClient } from "./storage/index.js";
 import dotenv from "dotenv";
 // @ts-ignore: multer has no types in tsconfig
 import multer from 'multer';
@@ -27,116 +27,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Replit Object Storage configuration
-const REPLIT_OBJECT_STORAGE_BUCKET_ID = process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID || 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826';
+// Get the object storage client instance
+const objectClient: IObjectStorageClient = getObjectStorageClient({
+  bucketId: process.env.REPLIT_OBJECT_STORAGE_BUCKET_ID || 'replit-objstore-98b6b970-0937-4dd6-9dc9-d33d8ec62826'
+});
 
 const upload = multer();
 
-// Environment detection for Replit Object Storage
-// Check multiple possible indicators for Replit environment
-const isReplitEnvironment = !!(
-  process.env.REPL_ID || 
-  process.env.REPLIT_DB_URL || 
-  process.env.REPLIT_DEPLOYMENT || 
-  process.env.REPLIT_DOMAINS ||
-  process.env.FORCE_REPLIT_STORAGE === 'true'
-);
-
-console.log('🔍 Environment Detection:');
-console.log('  REPL_ID:', !!process.env.REPL_ID);
-console.log('  REPLIT_DB_URL:', !!process.env.REPLIT_DB_URL);
-console.log('  REPLIT_DEPLOYMENT:', !!process.env.REPLIT_DEPLOYMENT);
-console.log('  REPLIT_DOMAINS:', !!process.env.REPLIT_DOMAINS);
-console.log('  FORCE_REPLIT_STORAGE:', process.env.FORCE_REPLIT_STORAGE);
-console.log('  isReplitEnvironment:', isReplitEnvironment);
-
-// Create a single Replit Object Storage client instance
-let objectClient: Client | null = null;
-
-if (isReplitEnvironment) {
-  // Use real Replit Object Storage in Replit environment
-  console.log(`🚀 Using real Replit Object Storage with bucket: ${REPLIT_OBJECT_STORAGE_BUCKET_ID}`);
-  objectClient = new Client({
-    bucketId: REPLIT_OBJECT_STORAGE_BUCKET_ID
-  });
-} else {
-  // Create a development-compatible mock for local development
-  console.log("⚠️  Running in development mode - using mock object storage");
-  console.log("   Note: File uploads will work but won't persist between restarts");
-  
-  class DevelopmentObjectClient {
-    private storage: Map<string, Buffer> = new Map();
-    
-    async uploadFromBytes(objectName: string, data: Buffer): Promise<{ ok: boolean; error?: any }> {
-      this.storage.set(objectName, data);
-      console.log(`📁 Mock upload: ${objectName} (${data.length} bytes)`);
-      console.log(`📁 Total files in storage: ${this.storage.size}`);
-      console.log(`📁 Storage keys:`, Array.from(this.storage.keys()));
-      return { ok: true };
-    }
-    
-    async exists(objectName: string): Promise<{ ok: boolean; value: boolean; error?: any }> {
-      const exists = this.storage.has(objectName);
-      console.log(`🔍 Mock exists check: ${objectName} = ${exists}`);
-      return { ok: true, value: exists };
-    }
-    
-    async delete(objectName: string): Promise<{ ok: boolean; error?: any }> {
-      const existed = this.storage.delete(objectName);
-      console.log(`🗑️ Mock delete: ${objectName} (existed: ${existed})`);
-      return { ok: true };
-    }
-    
-    async list(options: { prefix: string }): Promise<{ ok: boolean; value: any[]; error?: any }> {
-      const results = Array.from(this.storage.keys())
-        .filter(key => key.startsWith(options.prefix))
-        .map(name => ({ name }));
-      console.log(`📋 Mock list: ${options.prefix}* = ${results.length} files`);
-      return { ok: true, value: results };
-    }
-    
-    downloadAsStream(objectName: string): any {
-      const data = this.storage.get(objectName) || Buffer.from('');
-      console.log(`⬇️ Mock download stream: ${objectName} (${data.length} bytes)`);
-      console.log(`⬇️ Storage has file: ${this.storage.has(objectName)}`);
-      console.log(`⬇️ Available files:`, Array.from(this.storage.keys()));
-      
-      const { Readable } = require('stream');
-      const stream = new Readable({
-        read() {
-          // Stream implementation that actually works
-        }
-      });
-      
-      // Push data in chunks for better streaming behavior
-      if (data.length > 0) {
-        const chunkSize = 64 * 1024; // 64KB chunks
-        let offset = 0;
-        while (offset < data.length) {
-          const chunk = data.slice(offset, offset + chunkSize);
-          stream.push(chunk);
-          offset += chunkSize;
-        }
-      }
-      stream.push(null); // End the stream
-      return stream;
-    }
-    
-    async downloadAsBytes(objectName: string): Promise<{ ok: boolean; value: Uint8Array; error?: any }> {
-      const data = this.storage.get(objectName);
-      console.log(`⬇️ Mock download bytes: ${objectName} (${data?.length || 0} bytes)`);
-      console.log(`⬇️ Storage has file: ${this.storage.has(objectName)}`);
-      
-      if (!data) {
-        return { ok: false, value: new Uint8Array(0), error: 'File not found' };
-      }
-      
-      return { ok: true, value: new Uint8Array(data) };
-    }
-  }
-  
-  objectClient = new DevelopmentObjectClient() as any;
-}
 
 // --- Manual import search configuration and helpers ---
 const MANUAL_IMPORT_PREFIXES: string[] = (process.env.MANUAL_IMPORT_PREFIXES || '')
