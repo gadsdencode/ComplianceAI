@@ -2310,11 +2310,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existsResult = await objectClient.exists(streamKey);
       console.log(`🔍 Object storage exists check result:`, existsResult);
       
+      // Check if the exists operation itself failed (e.g., network error)
       if (!existsResult.ok) {
         console.error(`❌ Error checking file existence: ${existsResult.error}`);
-        return res.status(500).json({ message: "Error checking file", error: existsResult.error });
+        // Return 503 Service Unavailable for storage service errors
+        return res.status(503).json({ 
+          message: "Storage service temporarily unavailable", 
+          error: existsResult.error,
+          retryable: true
+        });
       }
-      if (!existsResult.value) {
+      
+      // Now check if the file actually exists
+      if (existsResult.value === false) {
         console.warn(`⚠️ File not found at recorded key: ${streamKey}. Attempting fallback search by filename...`);
         try {
           const category = document.category || 'General';

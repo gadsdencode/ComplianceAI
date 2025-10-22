@@ -154,7 +154,8 @@ export class MockStorageClient implements IObjectStorageClient {
     
     if (this.shouldSimulateFailure()) {
       console.error(`❌ [Mock] Simulated exists check failure for: ${objectName}`);
-      return { ok: false, value: false, error: 'Simulated network error during exists check' };
+      // Don't set value on error - leave it undefined to differentiate from "not found"
+      return { ok: false, error: 'Simulated network error during exists check' };
     }
     
     const exists = this.storage.has(objectName);

@@ -112,7 +112,9 @@ export class ReplitStorageClient implements IObjectStorageClient {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`❌ Failed to check existence of ${objectName}:`, errorMessage);
-      return { ok: false, value: false, error: errorMessage };
+      // Important: Don't set value to false on error - leave it undefined
+      // This allows callers to differentiate between "file not found" and "error checking"
+      return { ok: false, error: errorMessage };
     }
   }
   
@@ -185,6 +187,13 @@ export class ReplitStorageClient implements IObjectStorageClient {
     try {
       // First check if the object exists
       const existsResult = await this.exists(objectName);
+      
+      // Check if the exists operation itself failed
+      if (!existsResult.ok) {
+        return { ok: false, error: `Failed to check object existence: ${existsResult.error}` };
+      }
+      
+      // Now check if the object actually exists
       if (!existsResult.value) {
         return { ok: false, error: `Object not found: ${objectName}` };
       }
@@ -245,6 +254,13 @@ export class ReplitStorageClient implements IObjectStorageClient {
     try {
       // First check if the object exists
       const existsResult = await this.exists(objectName);
+      
+      // Check if the exists operation itself failed
+      if (!existsResult.ok) {
+        return { ok: false, error: `Failed to check object existence: ${existsResult.error}` };
+      }
+      
+      // Now check if the object actually exists
       if (!existsResult.value) {
         return { ok: false, error: `Object not found: ${objectName}` };
       }
