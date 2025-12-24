@@ -6,10 +6,7 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import AuthPage from "@/pages/auth-page";
-import ModernDashboardPage from "@/pages/modern-dashboard-page";
-import UltraModernDashboardPage from "@/pages/ultra-modern-dashboard-page";
-import MinimalDashboardPage from "@/pages/minimal-dashboard-page";
-import SimplifiedDashboardPage from "@/pages/simplified-dashboard-page";
+import DashboardPage from "@/pages/dashboard-page";
 import ModernDocumentsPage from "@/pages/modern-documents-page";
 import SimplifiedAnalyticsPage from "@/pages/simplified-analytics-page";
 import SimplifiedCalendarPage from "@/pages/simplified-calendar-page";
@@ -17,21 +14,11 @@ import UsersPage from "@/pages/users-page";
 import SettingsPage from "@/pages/settings-page";
 import DocumentDetailPage from "@/pages/document-detail-page";
 import DocumentCreationPage from "@/pages/document-creation-page";
-import EnhancedSearchbarDemo from "@/pages/enhanced-searchbar-demo";
-import SearchCentricDashboardPage from "@/pages/search-centric-dashboard-page";
-import EnhancedSearchDashboardPage from "@/pages/enhanced-search-dashboard-page";
-import DashboardPage from "@/pages/dashboard-page";
-
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={DashboardPage} />
-      <ProtectedRoute path="/dashboard/search-centric" component={SearchCentricDashboardPage} />
-      <ProtectedRoute path="/dashboard/enhanced-search" component={EnhancedSearchDashboardPage} />
-      <ProtectedRoute path="/dashboard/ultra-modern" component={UltraModernDashboardPage} />
-      <ProtectedRoute path="/dashboard/minimal" component={MinimalDashboardPage} />
-      <ProtectedRoute path="/dashboard/modern" component={ModernDashboardPage} />
       <ProtectedRoute path="/documents" component={ModernDocumentsPage} />
       <ProtectedRoute path="/documents/new" component={DocumentCreationPage} />
       <ProtectedRoute path="/documents/:id" component={DocumentDetailPage} />
@@ -39,7 +26,6 @@ function Router() {
       <ProtectedRoute path="/calendar" component={SimplifiedCalendarPage} />
       <ProtectedRoute path="/users" component={UsersPage} allowedRoles={["admin", "compliance_officer"]} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
-      <ProtectedRoute path="/searchbar-demo" component={EnhancedSearchbarDemo} />
       <Route path="/auth" component={AuthPage} />
       
       <Route component={NotFound} />

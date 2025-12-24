@@ -33,8 +33,14 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  // Enforce SESSION_SECRET in production
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (process.env.NODE_ENV === 'production' && !sessionSecret) {
+    throw new Error('SESSION_SECRET environment variable is required in production');
+  }
+
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "compliance-ai-secret-key",
+    secret: sessionSecret || "compliance-ai-dev-secret-key",
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,

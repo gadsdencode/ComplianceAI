@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,11 @@ import {
   FolderPlus,
   Filter,
   MoreHorizontal,
-  Clock
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +42,16 @@ interface UnifiedDocument {
   createdAt: string;
   type: 'compliance' | 'user' | 'template';
   document: Document | UserDocument | Template;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 interface UnifiedDocumentManagerProps {
@@ -55,23 +69,55 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch all document types
-  const { data: complianceDocuments = [], isLoading: isLoadingCompliance, error: complianceError } = useQuery<Document[]>({
-    queryKey: ['/api/documents', { status: activeTab !== 'all' ? activeTab : undefined }],
-    retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  // Fetch paginated compliance documents
+  const { 
+    data: complianceResponse, 
+    isLoading: isLoadingCompliance, 
+    error: complianceError,
+    isFetching: isFetchingCompliance
+  } = useQuery<PaginatedResponse<Document>>({
+    queryKey: ['/api/documents', { page, limit, status: activeTab !== 'all' ? activeTab : undefined }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      });
+      
+      if (activeTab !== 'all') {
+        params.set('status', activeTab);
+      }
+      
+      const response = await fetch(`/api/documents?${params.toString()}`, {
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch documents: ${response.status}`);
+      }
+      
+      return response.json();
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30 * 1000,
   });
+
+  const complianceDocuments = complianceResponse?.data || [];
+  const pagination = complianceResponse?.pagination;
 
   const { data: userDocuments = [], isLoading: isLoadingUser, error: userError } = useQuery<UserDocument[]>({
     queryKey: ['/api/user-documents'],
     retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: templates = [], isLoading: isLoadingTemplates, error: templatesError } = useQuery<Template[]>({
     queryKey: ['/api/templates'],
     retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
   // Combine and transform documents
@@ -116,6 +162,12 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
     });
   }, [unifiedDocuments, searchQuery, documentType, activeTab]);
 
+  // Reset to page 1 when filters change
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setPage(1);
+  };
+
   // Quick actions
   const handleQuickAction = (action: string, document: UnifiedDocument) => {
     switch (action) {
@@ -125,7 +177,6 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
         break;
       case 'edit':
         if (document.type === 'user') {
-          // Inline edit for user documents
           navigate(`/documents/${document.id}?action=edit`);
         } else {
           navigate(`/documents/${document.id}`);
@@ -171,7 +222,6 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
   };
 
   const handleShare = (doc: UnifiedDocument) => {
-    // Quick share functionality
     const shareUrl = `${window.location.origin}/documents/${doc.id}`;
     navigator.clipboard.writeText(shareUrl);
     toast({
@@ -181,7 +231,6 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
   };
 
   const handleCreateTemplate = (doc: UnifiedDocument) => {
-    // Quick template creation
     toast({
       title: "Template Creation",
       description: "Template creation feature coming soon",
@@ -241,6 +290,56 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
     return actions;
   };
 
+  // Pagination component
+  const PaginationControls = () => {
+    if (!pagination || pagination.totalPages <= 1) return null;
+
+    return (
+      <div className="flex items-center justify-between px-2 py-4 border-t">
+        <div className="text-sm text-slate-600">
+          Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} documents
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(1)}
+            disabled={page === 1 || isFetchingCompliance}
+          >
+            <ChevronsLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1 || isFetchingCompliance}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium px-3">
+            Page {pagination.page} of {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+            disabled={page === pagination.totalPages || isFetchingCompliance}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(pagination.totalPages)}
+            disabled={page === pagination.totalPages || isFetchingCompliance}
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={cn("space-y-6", className)}>
       {/* Header with Quick Actions */}
@@ -288,7 +387,7 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
       </div>
 
       {/* Status Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="draft">Drafts</TabsTrigger>
@@ -317,58 +416,63 @@ export default function UnifiedDocumentManager({ className }: UnifiedDocumentMan
               <p className="text-sm">Try adjusting your search or filters</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {filteredDocuments.map((doc) => (
-                <Card key={`${doc.type}-${doc.id}`} className="border-0 shadow-sm hover:shadow-md transition-all duration-200 group hover:scale-[1.01]">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4 flex-1 min-w-0">
-                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center flex-shrink-0 shadow-sm">
-                          <FileText className="h-6 w-6 text-slate-700" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-slate-900 text-lg truncate">{doc.title}</h3>
-                          <div className="flex items-center space-x-2 mt-2">
-                            {getTypeBadge(doc.type)}
-                            {getStatusBadge(doc.status)}
-                            {doc.category && (
-                              <Badge variant="outline" className="text-xs font-medium">{doc.category}</Badge>
-                            )}
+            <div className="space-y-4">
+              <div className="grid gap-4">
+                {filteredDocuments.map((doc) => (
+                  <Card key={`${doc.type}-${doc.id}`} className="border-0 shadow-sm hover:shadow-md transition-all duration-200 group hover:scale-[1.01]">
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4 flex-1 min-w-0">
+                          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center flex-shrink-0 shadow-sm">
+                            <FileText className="h-6 w-6 text-slate-700" />
                           </div>
-                          <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            Updated {formatDistanceToNow(new Date(doc.updatedAt), { addSuffix: true })}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-slate-900 text-lg truncate">{doc.title}</h3>
+                            <div className="flex items-center space-x-2 mt-2">
+                              {getTypeBadge(doc.type)}
+                              {getStatusBadge(doc.status)}
+                              {doc.category && (
+                                <Badge variant="outline" className="text-xs font-medium">{doc.category}</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Updated {formatDistanceToNow(new Date(doc.updatedAt), { addSuffix: true })}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      
-                      {/* Quick Actions */}
-                      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        {getQuickActions(doc).map((action) => (
+                        
+                        {/* Quick Actions */}
+                        <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          {getQuickActions(doc).map((action) => (
+                            <Button
+                              key={action.key}
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleQuickAction(action.key, doc)}
+                              className={cn("h-9 w-9 p-0 rounded-lg hover:bg-slate-100", action.color)}
+                              title={action.label}
+                            >
+                              <action.icon className="h-4 w-4" />
+                            </Button>
+                          ))}
                           <Button
-                            key={action.key}
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleQuickAction(action.key, doc)}
-                            className={cn("h-9 w-9 p-0 rounded-lg hover:bg-slate-100", action.color)}
-                            title={action.label}
+                            className="h-9 w-9 p-0 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            title="More options"
                           >
-                            <action.icon className="h-4 w-4" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        ))}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 w-9 p-0 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                          title="More options"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              
+              {/* Pagination Controls */}
+              <PaginationControls />
             </div>
           )}
         </TabsContent>

@@ -1,10 +1,11 @@
 import UnifiedLayout from '@/components/layouts/UnifiedLayout';
-import MinimalDashboard from '@/components/dashboard/MinimalDashboard';
+import EnhancedDashboard from '@/components/dashboard/EnhancedDashboard';
 
 export default function MinimalDashboardPage() {
   return (
     <UnifiedLayout>
-      <MinimalDashboard />
+      <EnhancedDashboard />
     </UnifiedLayout>
   );
 }
+

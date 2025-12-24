@@ -41,6 +41,10 @@ export interface IStorage {
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }): Promise<Document[]>;
+  countDocuments(options?: {
+    createdById?: number;
+    status?: string;
+  }): Promise<number>;
   searchDocuments(options: {
     searchQuery: string;
     createdById?: number;
@@ -275,6 +279,30 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query;
+  }
+
+  async countDocuments(options: {
+    createdById?: number;
+    status?: string;
+  } = {}): Promise<number> {
+    const filters = [];
+    
+    if (options.createdById !== undefined) {
+      filters.push(eq(documents.createdById, options.createdById));
+    }
+    
+    if (options.status !== undefined) {
+      filters.push(eq(documents.status, options.status as "draft" | "pending_approval" | "active" | "expired" | "archived"));
+    }
+    
+    let query = db.select({ count: sql<number>`count(*)` }).from(documents);
+    
+    if (filters.length > 0) {
+      query = query.where(and(...filters)) as typeof query;
+    }
+    
+    const result = await query;
+    return Number(result[0]?.count || 0);
   }
   
   async searchDocuments(options: {

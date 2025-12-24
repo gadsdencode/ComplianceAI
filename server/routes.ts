@@ -162,26 +162,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const options: any = {};
+      const countOptions: any = {};
       
       // Filter by user if not admin or compliance officer
       if (req.user.role === "employee") {
         options.createdById = req.user.id;
+        countOptions.createdById = req.user.id;
       }
       
       if (req.query.status) {
         options.status = req.query.status as string;
+        countOptions.status = req.query.status as string;
       }
       
-      if (req.query.limit) {
-        options.limit = parseInt(req.query.limit as string);
-      }
+      // Pagination parameters
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100); // Max 100 per page
+      const offset = (page - 1) * limit;
       
-      if (req.query.offset) {
-        options.offset = parseInt(req.query.offset as string);
-      }
+      options.limit = limit;
+      options.offset = offset;
       
-      const documents = await storage.listDocuments(options);
-      res.json(documents);
+      // Fetch documents and total count in parallel
+      const [documents, total] = await Promise.all([
+        storage.listDocuments(options),
+        storage.countDocuments(countOptions)
+      ]);
+      
+      // Return paginated response
+      res.json({
+        data: documents,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
     } catch (error: any) {
       res.status(500).json({ message: "Error retrieving documents", error: error.message });
     }

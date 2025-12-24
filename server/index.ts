@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes.js";
+import { registerRoutes } from "./routes/index.js";
 import { setupVite, serveStatic, log } from "./vite.js";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -12,16 +12,26 @@ function validateEnvironment() {
   console.log("\n🔍 Environment Variable Check:");
   console.log("================================");
   
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Required in all environments
   const requiredVars = ["DATABASE_URL"];
-  const optionalVars = ["OPENAI_API_KEY", "SESSION_SECRET", "PORT"];
+  
+  // Required only in production
+  const productionRequiredVars = isProduction ? ["SESSION_SECRET"] : [];
+  
+  const optionalVars = ["OPENAI_API_KEY", "PORT"];
+  if (!isProduction) {
+    optionalVars.push("SESSION_SECRET");
+  }
   
   let hasErrors = false;
   
-  requiredVars.forEach(varName => {
+  [...requiredVars, ...productionRequiredVars].forEach(varName => {
     if (process.env[varName]) {
       console.log(`✅ ${varName}: Set`);
     } else {
-      console.error(`❌ ${varName}: MISSING (Required)`);
+      console.error(`❌ ${varName}: MISSING (Required${productionRequiredVars.includes(varName) ? ' in production' : ''})`);
       hasErrors = true;
     }
   });

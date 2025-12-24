@@ -10,6 +10,14 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Custom error class for AI service unavailability
+export class AIServiceUnavailableError extends Error {
+  constructor(message: string = 'AI Service temporarily unavailable') {
+    super('AI_SERVICE_UNAVAILABLE');
+    this.name = 'AIServiceUnavailableError';
+  }
+}
+
 export interface AIService {
   generateDocumentFromTemplate(templateContent: string, companyInfo: any): Promise<string>;
   improveDocumentContent(content: string): Promise<string>;
@@ -35,16 +43,27 @@ class AIServiceImpl implements AIService {
         temperature: 0.3,
       });
       
-      return response.choices[0]?.message?.content || templateContent;
-    } catch (error) {
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new AIServiceUnavailableError();
+      }
+      
+      return content;
+    } catch (error: any) {
       console.error("Error generating document from template:", error);
       
-      // Fallback to simple replacement of company name if AI fails
-      let generatedContent = templateContent;
-      if (companyInfo.name) {
-        generatedContent = generatedContent.replace(/\[Company Name\]/g, companyInfo.name);
+      // If OpenAI API key is not configured, throw a clear error
+      if (error.message?.includes('API key') || error.code === 'invalid_api_key') {
+        throw new Error('AI_SERVICE_NOT_CONFIGURED');
       }
-      return generatedContent;
+      
+      // If it's already an AIServiceUnavailableError, rethrow it
+      if (error instanceof AIServiceUnavailableError) {
+        throw error;
+      }
+      
+      // For other errors, throw AI_SERVICE_UNAVAILABLE
+      throw new AIServiceUnavailableError();
     }
   }
   
@@ -65,10 +84,24 @@ class AIServiceImpl implements AIService {
         temperature: 0.5,
       });
       
-      return response.choices[0]?.message?.content || content;
-    } catch (error) {
+      const improvedContent = response.choices[0]?.message?.content;
+      if (!improvedContent) {
+        throw new AIServiceUnavailableError();
+      }
+      
+      return improvedContent;
+    } catch (error: any) {
       console.error("Error improving document content:", error);
-      return content + "\n\n[AI-suggested improvement: Consider adding more specific details about data handling procedures.]";
+      
+      if (error.message?.includes('API key') || error.code === 'invalid_api_key') {
+        throw new Error('AI_SERVICE_NOT_CONFIGURED');
+      }
+      
+      if (error instanceof AIServiceUnavailableError) {
+        throw error;
+      }
+      
+      throw new AIServiceUnavailableError();
     }
   }
   
@@ -90,7 +123,11 @@ class AIServiceImpl implements AIService {
         response_format: { type: "json_object" }
       });
       
-      const resultText = response.choices[0]?.message?.content || "";
+      const resultText = response.choices[0]?.message?.content;
+      if (!resultText) {
+        throw new AIServiceUnavailableError();
+      }
+      
       try {
         const result = JSON.parse(resultText);
         if (Array.isArray(result.issues) && typeof result.score === 'number') {
@@ -99,29 +136,23 @@ class AIServiceImpl implements AIService {
             score: result.score
           };
         }
+        throw new Error('Invalid response format');
       } catch (jsonError) {
         console.error("Error parsing JSON from OpenAI response:", jsonError);
+        throw new AIServiceUnavailableError();
+      }
+    } catch (error: any) {
+      console.error("Error checking compliance issues:", error);
+      
+      if (error.message?.includes('API key') || error.code === 'invalid_api_key') {
+        throw new Error('AI_SERVICE_NOT_CONFIGURED');
       }
       
-      // Fallback
-      return {
-        issues: [
-          "Missing data retention policy specifics",
-          "Unclear incident response procedure",
-          "No mention of employee training requirements"
-        ],
-        score: 0.75
-      };
-    } catch (error) {
-      console.error("Error checking compliance issues:", error);
-      return {
-        issues: [
-          "Error analyzing document",
-          "Missing data retention policy specifics",
-          "Unclear incident response procedure"
-        ],
-        score: 0.75
-      };
+      if (error instanceof AIServiceUnavailableError) {
+        throw error;
+      }
+      
+      throw new AIServiceUnavailableError();
     }
   }
   
@@ -143,7 +174,11 @@ class AIServiceImpl implements AIService {
         response_format: { type: "json_object" }
       });
       
-      const resultText = response.choices[0]?.message?.content || "";
+      const resultText = response.choices[0]?.message?.content;
+      if (!resultText) {
+        throw new AIServiceUnavailableError();
+      }
+      
       try {
         const result = JSON.parse(resultText);
         if (Array.isArray(result.actions) || Array.isArray(result.suggestions) || Array.isArray(result)) {
@@ -151,23 +186,23 @@ class AIServiceImpl implements AIService {
             ? result 
             : (result.actions || result.suggestions || []);
         }
+        throw new Error('Invalid response format');
       } catch (jsonError) {
         console.error("Error parsing JSON from OpenAI response:", jsonError);
+        throw new AIServiceUnavailableError();
+      }
+    } catch (error: any) {
+      console.error("Error suggesting compliance actions:", error);
+      
+      if (error.message?.includes('API key') || error.code === 'invalid_api_key') {
+        throw new Error('AI_SERVICE_NOT_CONFIGURED');
       }
       
-      // Fallback
-      return [
-        "Update your ISO 27001 documentation",
-        "Schedule a security awareness training session",
-        "Review vendor agreements for GDPR compliance"
-      ];
-    } catch (error) {
-      console.error("Error suggesting compliance actions:", error);
-      return [
-        "Update your ISO 27001 documentation",
-        "Schedule a security awareness training session",
-        "Review vendor agreements for GDPR compliance"
-      ];
+      if (error instanceof AIServiceUnavailableError) {
+        throw error;
+      }
+      
+      throw new AIServiceUnavailableError();
     }
   }
 }
