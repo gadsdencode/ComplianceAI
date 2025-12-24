@@ -27,9 +27,18 @@ export default function ModernDocumentsPage() {
       };
       formData.append('metadata', JSON.stringify(metadata));
       
-      return await apiRequest('POST', '/api/user-documents/upload', formData, {
-        'Content-Type': 'multipart/form-data'
+      const response = await fetch('/api/user-documents/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
       });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Upload failed');
+      }
+      
+      return response.json();
     },
     onSuccess: (data, file) => {
       toast({

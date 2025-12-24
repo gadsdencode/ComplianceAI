@@ -72,6 +72,7 @@ interface SearchState {
   searchScope: SearchScope;
   recentSearches: string[];
   showSuggestions: boolean;
+  searchSuggestions: SearchSuggestion[];
   
   // Performance tracking
   searchHistory: Array<{
@@ -165,6 +166,7 @@ export const useSearchStore = create<SearchState>()(
         }
       })(),
       showSuggestions: false,
+      searchSuggestions: [],
       searchHistory: (() => {
         try {
           return JSON.parse(localStorage.getItem('searchHistory') || '[]');
@@ -238,13 +240,18 @@ export const useSearchStore = create<SearchState>()(
         set({ showSuggestions }, false, 'setShowSuggestions');
       },
 
+      setSearchSuggestions: (searchSuggestions: SearchSuggestion[]) => {
+        set({ searchSuggestions }, false, 'setSearchSuggestions');
+      },
+
       clearSearch: () => {
         set({
           query: '',
           searchResults: initialSearchResults,
           searchContext: initialSearchContext,
           isSearching: false,
-          showSuggestions: false
+          showSuggestions: false,
+          searchSuggestions: []
         }, false, 'clearSearch');
       },
 
@@ -352,7 +359,7 @@ export const useSearchStore = create<SearchState>()(
     })),
     {
       name: 'search-store',
-      partialize: (state) => ({
+      partialize: (state: SearchState) => ({
         recentSearches: state.recentSearches,
         searchHistory: state.searchHistory
       })
