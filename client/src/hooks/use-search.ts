@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   useSearchStore, 
@@ -437,5 +437,3 @@ function generateSearchInsights(
   return insights;
 }
 
-// Import useState for the debounce hook
-import { useState } from 'react';

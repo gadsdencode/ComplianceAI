@@ -157,9 +157,21 @@ export const useSearchStore = create<SearchState>()(
       searchContext: initialSearchContext,
       isSearchFocused: false,
       searchScope: 'all',
-      recentSearches: JSON.parse(localStorage.getItem('recentSearches') || '[]'),
+      recentSearches: (() => {
+        try {
+          return JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        } catch {
+          return [];
+        }
+      })(),
       showSuggestions: false,
-      searchHistory: JSON.parse(localStorage.getItem('searchHistory') || '[]'),
+      searchHistory: (() => {
+        try {
+          return JSON.parse(localStorage.getItem('searchHistory') || '[]');
+        } catch {
+          return [];
+        }
+      })(),
 
       // Actions
       setQuery: (query: string) => {
